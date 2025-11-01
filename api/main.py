@@ -1,3 +1,5 @@
+# api/main.py
+
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -5,11 +7,11 @@ from pydantic import BaseModel
 from typing import Optional
 import os
 
-# Router imports
+# Router imports (adjust paths if your project layout differs)
 from api.routers.map.overpass_routers import router as overpass_router
 from api.routers.gmap.gmaps_routers import router as gmaps_router
 
-# app = FastAPI()
+# optional supabase client usage (keep as you had)
 try:
     from supabase import create_client, Client
 except Exception:
@@ -22,14 +24,24 @@ app = FastAPI(
     version="1.0.0",
 )
 
+# mount routers with prefixes the frontend expects:
+# the frontend calls /api/map/set_sample -> ensure router is at prefix /api/map
 app.include_router(overpass_router, prefix="/api/map", tags=["map"])
 app.include_router(gmaps_router, prefix="/api/gmap", tags=["gmap"])
 
-
 # CORS for local dev; tighten for production
+# Prefer to declare your allowed origins in env var; fallback to common dev origin
+FRONTEND_ORIGINS = os.environ.get("FRONTEND_ORIGINS", "http://localhost:3000")
+# allow comma-separated origins in env var
+origins = [o.strip() for o in FRONTEND_ORIGINS.split(",") if o.strip()]
+
+# If you want wildcard dev behavior quickly, uncomment the line below:
+# origins = ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins or ["http://localhost:3000"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )

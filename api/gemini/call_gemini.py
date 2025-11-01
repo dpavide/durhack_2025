@@ -19,24 +19,6 @@ if not api_key:
 
 client = genai.Client(api_key=api_key)
 
-def generate_response(system_prompt="", prompt="", model="gemini-2.5-flash"):
-
-    try:
-
-        config = types.GenerateContentConfig(system_instruction=system_prompt)
-
-        response = client.models.generate_content(
-            model=model,
-            config=config,
-            contents=prompt
-        )
-
-        return response.text
-    
-    except Exception as e:
-
-        raise RuntimeError(f"API request failed {e}")
-    
 system_prompt = """
 You are an intelligent intent classification engine for a mapping application. Your sole task is to analyze a user's text request and map it to the most relevant OpenStreetMap 'amenity' tags from the list provided below.
 
@@ -94,5 +76,25 @@ You are an intelligent intent classification engine for a mapping application. Y
     "amenity=refugee_site", "amenity=vending_machine"
 ]"""
 
-prompt = "I want a quiet place to meet friends"
-print(generate_response(system_prompt=system_prompt, prompt=prompt))
+def generate_response(system_prompt="", prompt="", model="gemini-2.5-flash"):
+
+    try:
+
+        config = types.GenerateContentConfig(system_instruction=system_prompt)
+
+        response = client.models.generate_content(
+            model=model,
+            config=config,
+            contents=prompt
+        )
+
+        return response.text
+    
+    except Exception as e:
+
+        raise RuntimeError(f"API request failed {e}")
+    
+
+
+# prompt = "I want a quiet place to meet friends"
+# print(generate_response(system_prompt=system_prompt, prompt=prompt))

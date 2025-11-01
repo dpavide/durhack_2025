@@ -1,6 +1,6 @@
 # overpass_routers.py
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Body
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 import logging
@@ -18,14 +18,14 @@ from gmap.call_gmaps import call_gmaps
 
 router = APIRouter()
 
-# ---------- SAMPLE GLOBAL JSON (you said you wanted it in a global var for now) ----------
+# ---------- SAMPLE GLOBAL JSON (in-memory) ----------
 SAMPLE_DATA = [
     {
         "id": 144,
         "latlngs": {
             "0": [
-                {"lat": 52.4866351, "lng":  -1.9114572},
-                {"lat": 52.4773476, "lng":  -1.9132928},
+                {"lat": 52.4866351, "lng": -1.9114572},
+                {"lat": 52.4773476, "lng": -1.9132928},
                 {"lat": 52.4772993, "lng": -1.8930263},
                 {"lat": 52.4827054, "lng": -1.8936392},
             ]
@@ -135,7 +135,7 @@ def search_overpass_post(payload: List[FrontendPolygonItem], amenity: str = Quer
     """
     try:
         # Convert Pydantic models to dicts
-        payload_dicts = [p.dict() for p in payload]
+        payload_dicts = [p.model_dump() for p in payload]
         polygons = extract_polygons_from_frontend_json(payload_dicts)
         if not polygons:
             raise HTTPException(status_code=400, detail="No polygons found in payload.")
@@ -154,6 +154,43 @@ def search_overpass_post(payload: List[FrontendPolygonItem], amenity: str = Quer
         raise
     except Exception as exc:
         logging.exception("Error while querying Overpass (POST)")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ---------------- New endpoint to accept frontend simple polygon and set SAMPLE_DATA ----------------
+@router.post("/set_sample")
+def set_sample(payload: List[Dict[str, Any]] = Body(...)):
+    """
+    Accept a simple list of coords [{lat: x, lng: y} or {lat: x, lon: y}] and
+    set the module-level SAMPLE_DATA variable to a single-item list using the
+    same structure as your existing SAMPLE_DATA:
+      [ { "id": None, "latlngs": { "0": [ {lat, lng}, ... ] } } ]
+    This endpoint returns a small confirmation JSON.
+    """
+    global SAMPLE_DATA
+    try:
+        coords = []
+        for p in payload:
+            if not isinstance(p, dict):
+                continue
+            # Accept multiple key names for robustness
+            lat = p.get("lat") or p.get("latitude")
+            lon = p.get("lng") or p.get("lon") or p.get("longitude")
+            if lat is None or lon is None:
+                continue
+            coords.append({"lat": float(lat), "lng": float(lon)})
+
+        if not coords:
+            raise HTTPException(status_code=400, detail="No valid lat/lon pairs in payload.")
+
+        # Update SAMPLE_DATA to the shape other endpoints expect
+        SAMPLE_DATA = [{"id": None, "latlngs": {"0": coords}}]
+
+        return {"status": "ok", "saved_points": len(coords)}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logging.exception("Error in set_sample")
         raise HTTPException(status_code=500, detail=str(exc))
 
 
