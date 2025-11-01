@@ -2,10 +2,7 @@
   "builds": [
     {
       "src": "api/main.py",
-      "use": "@vercel/python",
-      "config": {
-        "includeFiles": ["routers/**"] 
-      }
+      "use": "@vercel/python"
     }
   ],
   "routes": [
@@ -13,5 +10,8 @@
       "src": "/(.*)",
       "dest": "api/main.py"
     }
-  ]
+  ],
+  "env": {
+    "PYTHONPATH": "./api"
+  }
 }
