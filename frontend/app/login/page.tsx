@@ -81,30 +81,6 @@ export default function LoginPage() {
     }
   };
 
-  const handleGoogle = async () => {
-    setErr(null);
-    setMsg(null);
-    setLoading(true);
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo:
-            typeof window !== "undefined" ? window.location.origin : undefined,
-          queryParams: {
-            access_type: "offline",
-            prompt: "consent",
-          },
-        },
-      });
-      if (error) throw error;
-      // Redirect will occur; leave loading true.
-    } catch (e: any) {
-      setLoading(false);
-      setErr(e.message || "Google sign-in failed");
-    }
-  };
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-black">
       <div className="w-full max-w-md rounded-lg border border-black/[.08] dark:border-white/[.145] bg-white dark:bg-zinc-900 p-6">
@@ -151,19 +127,6 @@ export default function LoginPage() {
             Resend confirmation email
           </button>
         )}
-
-        <div className="my-4 flex items-center">
-          <div className="h-px flex-1 bg-black/10 dark:bg-white/20" />
-          <span className="px-3 text-xs text-zinc-500">OR</span>
-          <div className="h-px flex-1 bg-black/10 dark:bg-white/20" />
-        </div>
-        <button
-          onClick={handleGoogle}
-          disabled={loading}
-          className="w-full h-10 rounded-md border border-black/[.08] px-4 text-sm transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
-        >
-          {loading ? "Redirecting..." : "Continue with Google"}
-        </button>
 
         <div className="mt-4">
           <button
