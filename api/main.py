@@ -1,12 +1,67 @@
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import Optional
+import os
 
+try:
+    from supabase import create_client, Client
+except Exception:
+    create_client = None
+    Client = None
 
 app = FastAPI(
     title="Vercel + FastAPI",
     description="Vercel + FastAPI",
     version="1.0.0",
 )
+
+# CORS for local dev; tighten for production
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+_supa: Optional["Client"] = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) if (create_client and SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY) else None
+
+class SignDownloadRequest(BaseModel):
+    bucket: str
+    path: str
+    expires_in: int = 3600
+
+@app.post("/api/storage/sign-download")
+def sign_download(req: SignDownloadRequest):
+    if not _supa:
+        return {"error": "Server storage not configured"}
+    res = _supa.storage.from_(req.bucket).create_signed_url(req.path, req.expires_in)
+    url = (res or {}).get("signed_url")
+    if not url:
+        return {"error": "Failed to create signed URL", "details": res}
+    return {"url": url}
+
+@app.get("/api/storage/list")
+def list_objects(bucket: str, prefix: str = ""):
+    if not _supa:
+        return {"error": "Server storage not configured"}
+    items = _supa.storage.from_(bucket).list(prefix)
+    files = [{"name": i.get("name")} for i in (items or [])]
+    return {"files": files}
+
+class DeleteObjectRequest(BaseModel):
+    bucket: str
+    path: str
+
+@app.delete("/api/storage/object")
+def delete_object(req: DeleteObjectRequest):
+    if not _supa:
+        return {"error": "Server storage not configured"}
+    res = _supa.storage.from_(req.bucket).remove([req.path])
+    return {"result": res}
 
 
 @app.get("/api/data")
