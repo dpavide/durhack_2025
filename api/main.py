@@ -6,8 +6,8 @@ from typing import Optional
 import os
 
 # Router imports
-from routers.map.overpass_routers import router as overpass_router
-from routers.gmap.gmaps_routers import router as gmaps_router
+from api.routers.map.overpass_routers import router as overpass_router
+from api.routers.gmap.gmaps_routers import router as gmaps_router
 
 # app = FastAPI()
 try:
