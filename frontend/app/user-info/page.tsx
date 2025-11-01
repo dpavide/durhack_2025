@@ -15,7 +15,7 @@ export default function UserInfoPage() {
       e.preventDefault();
       clear();
     };
-
+// needed to note I currently created 7 branches 
   return (
     <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-black">
       <div className="w-full max-w-md rounded-lg border border-black/[.08] dark:border-white/[.145] bg-white dark:bg-zinc-900 p-6">
