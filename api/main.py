@@ -32,7 +32,7 @@ app.add_middleware(
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
-_supa: Optional["Client"] = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) if (create_client and SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY) else None
+_supa = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) if (create_client and SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY) else None
 
 class SignDownloadRequest(BaseModel):
     bucket: str
