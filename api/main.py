@@ -343,3 +343,19 @@ def read_root():
     </body>
     </html>
     """
+
+
+# If integration between backend and frontend fails try to undoc / uncomment this 
+
+"""
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # or restrict to ["http://localhost:3000"]
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+"""
