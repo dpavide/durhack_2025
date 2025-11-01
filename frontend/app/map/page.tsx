@@ -29,7 +29,7 @@ const EditControl = dynamic(
 );
 
 export default function MapPage() {
-  const [polygon, setPolygon] = useState<any[]>([]);
+  const [polygon, setPolygon] = useState<Array<{ lat: number; lon: number }>>([]);
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
@@ -49,15 +49,45 @@ export default function MapPage() {
     }
   }, []);
 
+  const toJsonCoords = (latlngs: any[]) =>
+    latlngs.map((ll: any) => ({ lat: ll.lat, lon: ll.lng }));
+
   const handleCreated = (e: any) => {
     const { layerType, layer } = e;
     if (layerType === "polygon") {
-      const coords = layer.getLatLngs()[0].map((latlng: any) => [
-        latlng.lat,
-        latlng.lng,
-      ]);
-      setPolygon(coords);
+      const latlngs = layer.getLatLngs()[0];
+      setPolygon(toJsonCoords(latlngs));
+      // Near real-time updates while editing this layer
+      layer.on("edit", () => {
+        const updated = layer.getLatLngs()[0];
+        setPolygon(toJsonCoords(updated));
+      });
     }
+  };
+
+  const handleEdited = (e: any) => {
+    // Update after edit action completes (saves)
+    const layers = e.layers;
+    let updatedOnce = false;
+    layers.eachLayer((layer: any) => {
+      if (typeof layer.getLatLngs === "function") {
+        const latlngs = layer.getLatLngs()[0];
+        setPolygon(toJsonCoords(latlngs));
+        updatedOnce = true;
+        // Re-attach listener to keep live updates for future edits
+        layer.on("edit", () => {
+          const updated = layer.getLatLngs()[0];
+          setPolygon(toJsonCoords(updated));
+        });
+      }
+    });
+    if (!updatedOnce) {
+      // no-op
+    }
+  };
+
+  const handleDeleted = () => {
+    setPolygon([]);
   };
 
   if (!isClient) {
@@ -101,6 +131,8 @@ export default function MapPage() {
               <EditControl
                 position="topright"
                 onCreated={handleCreated}
+                onEdited={handleEdited}
+                onDeleted={handleDeleted}
                 draw={{
                   rectangle: false,
                   circle: false,
@@ -115,7 +147,10 @@ export default function MapPage() {
                 }}
               />
               {polygon.length > 0 && (
-                <Polygon positions={polygon} color="#2563eb" />
+                <Polygon
+                  positions={polygon.map((p) => [p.lat, p.lon]) as any}
+                  color="#2563eb"
+                />
               )}
             </FeatureGroup>
           </MapContainer>
