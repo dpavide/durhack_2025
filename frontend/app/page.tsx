@@ -17,7 +17,7 @@ function UserMenu({ email }: { email: string }) {
     <div className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-2 rounded-md border border-black/[.08] px-3 py-2 text-sm transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-300 dark:hover:bg-[#1a1a1a]"
+        className="inline-flex items-center gap-2 rounded-md border border-black/8 px-3 py-2 text-sm transition-colors hover:border-transparent hover:bg-black/4 dark:border-white/[.145] dark:text-zinc-300 dark:hover:bg-[#1a1a1a]"
       >
         <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-zinc-200 dark:bg-zinc-700">
           <svg
@@ -35,17 +35,17 @@ function UserMenu({ email }: { email: string }) {
         <span className="max-w-[180px] truncate">{email}</span>
       </button>
       {open && (
-        <div className="absolute right-0 z-10 mt-2 w-48 rounded-md border border-black/[.08] bg-white shadow-lg dark:border-white/[.145] dark:bg-zinc-900">
+        <div className="absolute right-0 z-10 mt-2 w-48 rounded-md border border-black/8 bg-white shadow-lg dark:border-white/[.145] dark:bg-zinc-900">
           <div className="py-1">
             <Link
               href="/user-info"
               onClick={() => setOpen(false)}
-              className="block w-full px-4 py-2 text-left text-sm text-zinc-700 hover:bg-black/[.04] dark:text-zinc-300 dark:hover:bg-[#1a1a1a]"
+              className="block w-full px-4 py-2 text-left text-sm text-zinc-700 hover:bg-black/4 dark:text-zinc-300 dark:hover:bg-[#1a1a1a]"
             >
               User info
             </Link>
             <button
-              className="block w-full px-4 py-2 text-left text-sm text-zinc-700 hover:bg-black/[.04] dark:text-zinc-300 dark:hover:bg-[#1a1a1a]"
+              className="block w-full px-4 py-2 text-left text-sm text-zinc-700 hover:bg-black/4 dark:text-zinc-300 dark:hover:bg-[#1a1a1a]"
               onClick={async () => {
                 await supabase.auth.signOut();
                 setOpen(false);
@@ -85,7 +85,7 @@ export default function Home() {
           ) : (
             <Link
               href="/login"
-              className="inline-flex h-10 items-center rounded-md border border-black/[.08] px-4 text-sm transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
+              className="inline-flex h-10 items-center rounded-md border border-black/8 px-4 text-sm transition-colors hover:border-transparent hover:bg-black/4 dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
             >
               Sign Up / Login
             </Link>
@@ -139,7 +139,7 @@ export default function Home() {
             Deploy Now
           </a>
           <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
+            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/8 px-5 transition-colors hover:border-transparent hover:bg-black/4 dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
             href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
             target="_blank"
             rel="noopener noreferrer"
