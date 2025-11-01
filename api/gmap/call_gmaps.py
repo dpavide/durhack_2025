@@ -55,7 +55,7 @@ def get_place_details(place_id: str) -> Dict[str, Any]:
 
 def call_gmaps(name: str, lat: float, lng: float, radius: int = 100) -> Optional[Dict[str, Any]]:
     """
-    Combined helper function — searches for a place and returns its full details.
+    Combined helper function - searches for a place and returns its full details.
     """
     place_id = find_place_id(name, lat, lng, radius)
     if not place_id:
