@@ -1,6 +1,9 @@
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
+# Router imports
+from routers.map.overpass_routers import router as overpass_router
+
 # app = FastAPI()
 
 app = FastAPI(
@@ -8,6 +11,8 @@ app = FastAPI(
     description="Vercel + FastAPI",
     version="1.0.0",
 )
+
+app.include_router(overpass_router, prefix="/api/map", tags=["map"])
 
 
 @app.get("/api/data")
