@@ -7,6 +7,7 @@ import os
 
 # Router imports
 from routers.map.overpass_routers import router as overpass_router
+from routers.gmap.gmaps_routers import router as gmaps_router
 
 # app = FastAPI()
 try:
@@ -22,6 +23,9 @@ app = FastAPI(
 )
 
 app.include_router(overpass_router, prefix="/api/map", tags=["map"])
+app.include_router(gmaps_router, prefix="/api/gmap", tags=["gmap"])
+
+
 # CORS for local dev; tighten for production
 app.add_middleware(
     CORSMiddleware,
