@@ -1,13 +1,36 @@
+################################
+# Vercel, Node, and Build Outputs
+################################
 .vercel
-*.log
-*.pyc
-__pycache__
+node_modules/
+build/
+dist/
+out/
+.next/
 
-# Environments 
-.env 
-.venv 
-env/ 
-venv/ 
-ENV/ 
-env.bak/ 
-venv.bak/ 
+################################
+# Python and Virtual Environments
+################################
+# Byte-compiled files
+*.pyc
+__pycache__/
+
+# Virtual environments (your request)
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+################################
+# Logs and IDE Files
+################################
+*.log
+
+# Editor specific files (common additions)
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
