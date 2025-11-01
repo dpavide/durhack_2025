@@ -6,7 +6,7 @@ from typing import List, Dict, Any, Optional
 import logging
 
 # Import our helper functions
-from map.leaflet_to_overpass import (
+from api.map.leaflet_to_overpass import (
     extract_polygons_from_frontend_json,
     polygon_to_overpass_poly_string,
     build_overpass_query,
