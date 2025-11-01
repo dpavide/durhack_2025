@@ -3,15 +3,25 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import "leaflet/dist/leaflet.css";
+import "leaflet-draw/dist/leaflet.draw.css";
 import L from "leaflet";
+import { useMapEvents } from "react-leaflet";
 
-// --- Dynamic imports to avoid SSR "window is not defined" ---
+// dynamic imports to avoid SSR issues
 const MapContainer = dynamic(
   () => import("react-leaflet").then((m) => m.MapContainer),
   { ssr: false }
 );
 const TileLayer = dynamic(
   () => import("react-leaflet").then((m) => m.TileLayer),
+  { ssr: false }
+);
+const FeatureGroup = dynamic(
+  () => import("react-leaflet").then((m) => m.FeatureGroup),
+  { ssr: false }
+);
+const Polygon = dynamic(
+  () => import("react-leaflet").then((m) => m.Polygon),
   { ssr: false }
 );
 const Marker = dynamic(
@@ -22,10 +32,15 @@ const Popup = dynamic(
   () => import("react-leaflet").then((m) => m.Popup),
   { ssr: false }
 );
+// react-leaflet-draw control
+const EditControl = dynamic(
+  // @ts-ignore
+  () => import("react-leaflet-draw").then((m: any) => m.EditControl),
+  { ssr: false }
+);
 
-// ---- Types ----
-type PinnedPoint = {
-  id: string; // uuid
+type Pin = {
+  id: string;
   lat: number;
   lon: number;
   name?: string;
@@ -33,14 +48,31 @@ type PinnedPoint = {
   tags?: Record<string, string>;
 };
 
-const LS_KEY = "pinned_points_v1";
+const LS_KEY = "map_pins_v1";
 
-export default function MapPinPage() {
+/** v4 way to listen to clicks */
+function ClickBinder({
+  enabled,
+  onClick,
+}: {
+  enabled: boolean;
+  onClick: (lat: number, lng: number) => void;
+}) {
+  useMapEvents({
+    click(e) {
+      if (!enabled) return;
+      onClick(e.latlng.lat, e.latlng.lng);
+    },
+  });
+  return null;
+}
+
+export default function MapPage() {
+  const [polygon, setPolygon] = useState<any[]>([]);
   const [pinMode, setPinMode] = useState(false);
-  const [pins, setPins] = useState<PinnedPoint[]>([]);
+  const [pins, setPins] = useState<Pin[]>([]);
 
-  // Basic Leaflet default icon
-  const icon = useMemo(
+  const markerIcon = useMemo(
     () =>
       new L.Icon({
         iconUrl:
@@ -54,39 +86,35 @@ export default function MapPinPage() {
     []
   );
 
-  // Load saved pins
+  // restore/save pins
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(LS_KEY);
-      if (raw) setPins(JSON.parse(raw));
-    } catch {}
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) setPins(JSON.parse(raw));
   }, []);
-
-  // Save pins whenever they change
   useEffect(() => {
-    try {
-      localStorage.setItem(LS_KEY, JSON.stringify(pins));
-    } catch {}
+    localStorage.setItem(LS_KEY, JSON.stringify(pins));
   }, [pins]);
 
-  // Handle map click while in pin mode
-  const handleMapClick = async (e: any) => {
-    if (!pinMode) return;
-    const { lat, lng } = e.latlng;
+  const handleCreated = (e: any) => {
+    const { layerType, layer } = e;
+    if (layerType === "polygon") {
+      const coords = layer.getLatLngs()[0].map((latlng: any) => [
+        latlng.lat,
+        latlng.lng,
+      ]);
+      setPolygon(coords);
+    }
+  };
 
-    // Quick, hackathon-friendly input prompts.
-    // (You can replace with a modal form later.)
-    const name = window.prompt("Name for this place? (optional)") || undefined;
-    const website =
-      window.prompt("Website URL? (optional)") || undefined;
-
-    // Simple freeform tags input: key=value per line (optional)
+  const addPin = (lat: number, lng: number) => {
+    const name = window.prompt("Name (optional)") || undefined;
+    const website = window.prompt("Website (optional)") || undefined;
     const tagsInput =
       window.prompt(
-        "Extra tags? (optional)\nEnter lines like:\naddr:street=Navigation Street\namenity=restaurant"
+        "Extra tags (optional):\nkey=value per line\n(e.g. amenity=restaurant)"
       ) || "";
 
-    const tags: Record<string, string> | undefined =
+    const tags =
       tagsInput.trim().length
         ? Object.fromEntries(
             tagsInput
@@ -96,25 +124,18 @@ export default function MapPinPage() {
           )
         : undefined;
 
-    const newPin: PinnedPoint = {
-      id: crypto.randomUUID(),
-      lat,
-      lon: lng,
-      name,
-      website,
-      tags,
-    };
-    setPins((prev) => [...prev, newPin]);
+    setPins((prev) => [
+      ...prev,
+      { id: crypto.randomUUID(), lat, lon: lng, name, website, tags },
+    ]);
   };
 
-  // Load an example JSON and add its points as pins (optional helper)
   const loadFromJson = async () => {
     try {
       const res = await fetch("/api/restaurants.json");
       const data = await res.json();
       if (!data?.elements) return;
-
-      const jsonPins: PinnedPoint[] = data.elements.map((el: any) => ({
+      const imported: Pin[] = data.elements.map((el: any) => ({
         id: String(el.id),
         lat: el.lat,
         lon: el.lon,
@@ -122,88 +143,93 @@ export default function MapPinPage() {
         website: el.tags?.website,
         tags: el.tags,
       }));
-
-      setPins((prev) => {
-        // avoid duplicates by id
-        const existing = new Set(prev.map((p) => p.id));
-        const merged = [...prev, ...jsonPins.filter((p) => !existing.has(p.id))];
-        return merged;
-      });
-      alert("Loaded points from JSON!");
-    } catch (e) {
-      console.error(e);
+      const existing = new Set(pins.map((p) => p.id));
+      setPins((prev) => [...prev, ...imported.filter((p) => !existing.has(p.id))]);
+      alert("Loaded markers from JSON");
+    } catch {
       alert("Failed to load /api/restaurants.json");
     }
   };
 
-  // Remove a pin by id
-  const removePin = (id: string) => {
-    setPins((prev) => prev.filter((p) => p.id !== id));
+  const clearPins = () => {
+    if (confirm("Clear all pins?")) setPins([]);
   };
 
   return (
     <div className="min-h-screen bg-zinc-50">
-      {/* Top bar */}
-      <div className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b">
-        <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between">
-          <h1 className="text-xl sm:text-2xl font-semibold">
-            Pin Points on Map
-          </h1>
-          <div className="flex gap-2">
-            <button
-              className={`px-4 py-2 rounded-full text-sm font-medium transition ${
-                pinMode
-                  ? "bg-emerald-600 text-white"
-                  : "bg-zinc-200 text-zinc-900 hover:bg-zinc-300"
-              }`}
-              onClick={() => setPinMode((v) => !v)}
-              title="Toggle pin mode — click on map to add a marker"
-            >
-              {pinMode ? "Pin mode: ON" : "Pin mode: OFF"}
-            </button>
-            <button
-              className="px-4 py-2 rounded-full text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700"
-              onClick={loadFromJson}
-              title="Load markers from /api/restaurants.json"
-            >
-              Load from JSON
-            </button>
-            <button
-              className="px-4 py-2 rounded-full text-sm font-medium bg-rose-600 text-white hover:bg-rose-700"
-              onClick={() => {
-                if (confirm("Clear all saved pins?")) setPins([]);
-              }}
-              title="Remove all saved pins"
-            >
-              Clear pins
-            </button>
-          </div>
+      {/* Header with the BUTTONS you asked for */}
+      <div className="mx-auto max-w-6xl px-4 pt-8 pb-4 flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Select Area on Map</h1>
+        <div className="flex gap-2">
+          <button
+            className={`px-4 py-2 rounded-full text-sm font-medium transition ${
+              pinMode
+                ? "bg-emerald-600 text-white"
+                : "bg-zinc-200 hover:bg-zinc-300"
+            }`}
+            onClick={() => setPinMode((v) => !v)}
+            title="Toggle pin mode. When ON, click the map to drop a marker."
+          >
+            {pinMode ? "Pin mode: ON" : "Pin mode: OFF"}
+          </button>
+          <button
+            className="px-4 py-2 rounded-full text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700"
+            onClick={loadFromJson}
+          >
+            Load from JSON
+          </button>
+          <button
+            className="px-4 py-2 rounded-full text-sm font-medium bg-rose-600 text-white hover:bg-rose-700"
+            onClick={clearPins}
+          >
+            Clear pins
+          </button>
         </div>
       </div>
 
-      {/* Map */}
-      <div className="mx-auto max-w-6xl px-4 py-4">
+      <div className="mx-auto max-w-6xl px-4 pb-8">
         <div className="w-full h-[78vh] rounded-xl shadow overflow-hidden">
           <MapContainer
-            center={[52.48, -1.9]} // Birmingham as a nice default
-            zoom={14}
+            center={[53.5, -1.5]}
+            zoom={7}
             style={{ height: "100%", width: "100%" }}
-            // react-leaflet 'whenCreated' exposes raw leaflet map to register click
-            whenCreated={(map) => {
-              map.on("click", handleMapClick);
-            }}
           >
             <TileLayer
               attribution='&copy; <a href="https://www.maptiler.com/copyright/">MapTiler</a> | &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
               url={`https://api.maptiler.com/maps/basic-v2/256/{z}/{x}/{y}.png?key=${process.env.NEXT_PUBLIC_MAPTILER_KEY}`}
             />
 
-            {/* Render saved pins */}
+            {/* Clicks handled here when pinMode is ON */}
+            <ClickBinder enabled={pinMode} onClick={addPin} />
+
+            <FeatureGroup>
+              <EditControl
+                position="topright"
+                onCreated={handleCreated}
+                draw={{
+                  rectangle: false,
+                  circle: false,
+                  marker: false,
+                  circlemarker: false,
+                  polyline: false,
+                  polygon: {
+                    allowIntersection: false,
+                    showArea: true,
+                    shapeOptions: { color: "#2563eb" },
+                  },
+                }}
+              />
+              {polygon.length > 0 && (
+                <Polygon positions={polygon} color="#2563eb" />
+              )}
+            </FeatureGroup>
+
+            {/* Render user pins (open popup on hover) */}
             {pins.map((p) => (
               <Marker
                 key={p.id}
                 position={[p.lat, p.lon]}
-                icon={icon}
+                icon={markerIcon}
                 eventHandlers={{
                   mouseover: (e) => e.target.openPopup(),
                   mouseout: (e) => e.target.closePopup(),
@@ -217,8 +243,6 @@ export default function MapPinPage() {
                     <p className="text-zinc-600 -mt-1 mb-2">
                       {p.lat.toFixed(6)}, {p.lon.toFixed(6)} (lat/lon)
                     </p>
-
-                    {/* Tags like the OSM inspector style */}
                     {p.tags && (
                       <>
                         <p className="font-semibold">Tags</p>
@@ -231,8 +255,6 @@ export default function MapPinPage() {
                         </ul>
                       </>
                     )}
-
-                    {/* Website link if present */}
                     {p.website && (
                       <p className="truncate">
                         <a
@@ -245,26 +267,12 @@ export default function MapPinPage() {
                         </a>
                       </p>
                     )}
-
-                    <div className="mt-2">
-                      <button
-                        className="px-3 py-1 rounded-full text-xs bg-rose-600 text-white hover:bg-rose-700"
-                        onClick={() => removePin(p.id)}
-                      >
-                        Remove
-                      </button>
-                    </div>
                   </div>
                 </Popup>
               </Marker>
             ))}
           </MapContainer>
         </div>
-
-        <p className="text-xs text-zinc-500 mt-2">
-          Tip: Toggle <strong>Pin mode</strong>, then click on the map to drop a
-          marker. You can also load your provided JSON via the button.
-        </p>
       </div>
     </div>
   );
