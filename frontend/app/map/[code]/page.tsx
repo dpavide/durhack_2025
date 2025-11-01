@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 import "leaflet/dist/leaflet.css";
@@ -17,245 +17,499 @@ const EditControl = dynamic(() => import("react-leaflet-draw").then((m) => m.Edi
 
 type LatLon = { lat: number; lon: number };
 
+// Thresholds
+const WARN_THRESHOLD_KM2 = 5.0;
+const MAX_THRESHOLD_KM2 = 5.0;
+
 // Helpers: convert between positions and GeoJSON Polygon Feature
 function positionsToGeoJSON(positions: LatLon[]) {
-	if (!positions || positions.length < 3) return null;
-	const ring = positions.map((p) => [p.lon, p.lat]);
-	// close the ring
-	if (ring.length && (ring[0][0] !== ring[ring.length - 1][0] || ring[0][1] !== ring[ring.length - 1][1])) {
-		ring.push(ring[0]);
-	}
-	return {
-		type: "Feature",
-		properties: {},
-		geometry: {
-			type: "Polygon",
-			coordinates: [ring],
-		},
-	};
+  if (!positions || positions.length < 3) return null;
+  const ring = positions.map((p) => [p.lon, p.lat]);
+  if (ring.length && (ring[0][0] !== ring[ring.length - 1][0] || ring[0][1] !== ring[ring.length - 1][1])) {
+    ring.push(ring[0]);
+  }
+  return {
+    type: "Feature",
+    properties: {},
+    geometry: {
+      type: "Polygon",
+      coordinates: [ring],
+    },
+  };
 }
 
 function geoJSONToPositions(geo: any): LatLon[] {
-	try {
-		if (!geo) return [];
-		const geometry = geo.type === "Feature" ? geo.geometry : geo;
-		if (!geometry || geometry.type !== "Polygon") return [];
-		const ring = geometry.coordinates?.[0] ?? [];
-		// drop closing coord if present
-		const coords = ring.length > 1 && ring[0][0] === ring[ring.length - 1][0] && ring[0][1] === ring[ring.length - 1][1]
-			? ring.slice(0, -1)
-			: ring;
-		return coords.map((c: [number, number]) => ({ lon: c[0], lat: c[1] }));
-	} catch {
-		return [];
-	}
+  try {
+    if (!geo) return [];
+    const geometry = geo.type === "Feature" ? geo.geometry : geo;
+    if (!geometry || geometry.type !== "Polygon") return [];
+    const ring = geometry.coordinates?.[0] ?? [];
+    const coords =
+      ring.length > 1 && ring[0][0] === ring[ring.length - 1][0] && ring[0][1] === ring[ring.length - 1][1]
+        ? ring.slice(0, -1)
+        : ring;
+    return coords.map((c: [number, number]) => ({ lon: c[0], lat: c[1] }));
+  } catch {
+    return [];
+  }
+}
+
+// Compute area (km^2) using turf.area — dynamic import to avoid SSR issues
+async function computeAreaKm2(latlngs: Array<{ lat: number; lon: number }>) {
+  if (!latlngs || latlngs.length < 3) return 0;
+  const coords = [latlngs.map((p) => [p.lon, p.lat])];
+  const first = coords[0][0];
+  const last = coords[0][coords[0].length - 1];
+  if (first[0] !== last[0] || first[1] !== last[1]) {
+    coords[0].push(first);
+  }
+  const areaModule: any = await import("@turf/area");
+  const areaMeters2: number = areaModule.default({
+    type: "Feature",
+    geometry: { type: "Polygon", coordinates: coords },
+    properties: {},
+  });
+  return areaMeters2 / 1_000_000;
 }
 
 export default function MapPage() {
-	const params = useParams<{ code: string }>();
-	const router = useRouter();
-	const code = (params?.code ?? "").toString().toUpperCase();
+  const params = useParams<{ code: string }>();
+  const router = useRouter();
+  const code = (params?.code ?? "").toString().toUpperCase();
 
-	const [polygon, setPolygon] = useState<LatLon[]>([]);
-	const [isClient, setIsClient] = useState(false);
-	const [userId, setUserId] = useState<string | null>(null);
-	const [masterId, setMasterId] = useState<string | null>(null);
-	const isMaster = useMemo(() => !!userId && !!masterId && userId === masterId, [userId, masterId]);
-	const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isClient, setIsClient] = useState(false);
 
-	// Client-only mount and Leaflet icon fix
-	useEffect(() => {
-		setIsClient(true);
-		if (typeof window !== "undefined") {
-			const L = require("leaflet");
-			delete (L.Icon.Default.prototype as any)._getIconUrl;
-			L.Icon.Default.mergeOptions({
-				iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
-				iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
-				shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
-			});
-		}
-	}, []);
+  // Room + auth
+  const [userId, setUserId] = useState<string | null>(null);
+  const [masterId, setMasterId] = useState<string | null>(null);
+  const isMaster = useMemo(() => !!userId && !!masterId && userId === masterId, [userId, masterId]);
 
-	// Load session, room master and existing polygon
-	useEffect(() => {
-		(async () => {
-			const { data: s } = await supabase.auth.getSession();
-			const u = s.session?.user;
-			if (!u) {
-				router.replace("/");
-				return;
-			}
-			setUserId(u.id);
+  // Polygon state
+  const [polygon, setPolygon] = useState<LatLon[]>([]);
+  const fgRef = useRef<any>(null);
+  const lastLayerRef = useRef<any>(null);
 
-			const { data: room, error } = await supabase
-				.from("rooms")
-				.select("master_id, polygon_geojson")
-				.eq("room_code", code)
-				.single();
-			if (error || !room) {
-				router.replace("/home");
-				return;
-			}
-			setMasterId(room.master_id);
-			setPolygon(geoJSONToPositions(room.polygon_geojson));
-		})();
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [code]);
+  // Area + validation UI
+  const [areaKm2, setAreaKm2] = useState<number | null>(null);
+  const [polygonColor, setPolygonColor] = useState<string>("#2563eb");
+  const [isValid, setIsValid] = useState<boolean>(true);
+  const bannerVisible = areaKm2 !== null && areaKm2 > WARN_THRESHOLD_KM2;
 
-	// Realtime: listen for polygon updates
-	useEffect(() => {
-		if (!code) return;
-		const channel = supabase
-			.channel(`map-${code}`)
-			.on(
-				"postgres_changes",
-				{ event: "UPDATE", schema: "public", table: "rooms", filter: `room_code=eq.${code}` },
-				(payload) => {
-					const poly = (payload.new as any)?.polygon_geojson ?? null;
-					setPolygon(geoJSONToPositions(poly));
-				}
-			)
-			.subscribe();
-		return () => void supabase.removeChannel(channel);
-	}, [code]);
+  // Continue → backend
+  const [isSending, setIsSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [sendSuccess, setSendSuccess] = useState<boolean>(false);
 
-	// Debounced save to Supabase (master only)
-	const savePolygon = (positions: LatLon[]) => {
-		if (!isMaster) return;
-		if (saveTimer.current) clearTimeout(saveTimer.current);
-		saveTimer.current = setTimeout(async () => {
-			const feature = positionsToGeoJSON(positions);
-			const { error } = await supabase
-				.from("rooms")
-				.update({ polygon_geojson: feature })
-				.eq("room_code", code)
-				.eq("master_id", userId);
-			if (error) {
-				// ...optional: surface error
-			}
-		}, 400);
-	};
+  // Debounced Supabase save (master only)
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-	const toJsonCoords = (latlngs: any[]) => latlngs.map((ll: any) => ({ lat: ll.lat, lon: ll.lng }));
+  // Client-only mount + Leaflet icon fix + force Leaflet-Draw to show km²
+  useEffect(() => {
+    setIsClient(true);
+    if (typeof window !== "undefined") {
+      try {
+        const L = require("leaflet");
+        try {
+          require("leaflet-draw");
+        } catch (_) {
+          // ignore
+        }
+        delete (L.Icon.Default.prototype as any)._getIconUrl;
+        L.Icon.Default.mergeOptions({
+          iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
+          iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
+          shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+        });
 
-	const handleCreated = (e: any) => {
-		if (!isMaster) return;
-		const { layerType, layer } = e;
-		if (layerType === "polygon") {
-			const latlngs = layer.getLatLngs()[0];
-			const next = toJsonCoords(latlngs);
-			setPolygon(next);
-			savePolygon(next);
-			layer.on("edit", () => {
-				const updated = layer.getLatLngs()[0];
-				const positions = toJsonCoords(updated);
-				setPolygon(positions);
-				savePolygon(positions);
-			});
-		}
-	};
+        if ((L as any).GeometryUtil && typeof (L as any).GeometryUtil.readableArea === "function") {
+          const geom = (L as any).GeometryUtil;
+          geom.readableArea = (area: number, _isMetric?: boolean, precision?: number) => {
+            const km2 = area / 1_000_000;
+            const prec = typeof precision === "number" ? precision : 4;
+            return `${km2.toFixed(prec)} km²`;
+          };
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }, []);
 
-	const handleEdited = (e: any) => {
-		if (!isMaster) return;
-		const layers = e.layers;
-		let updatedOnce = false;
-		layers.eachLayer((layer: any) => {
-			if (typeof layer.getLatLngs === "function") {
-				const latlngs = layer.getLatLngs()[0];
-				const next = toJsonCoords(latlngs);
-				setPolygon(next);
-				savePolygon(next);
-				updatedOnce = true;
-				layer.on("edit", () => {
-					const updated = layer.getLatLngs()[0];
-					const positions = toJsonCoords(updated);
-					setPolygon(positions);
-					savePolygon(positions);
-				});
-			}
-		});
-		if (!updatedOnce) {
-			// no-op
-		}
-	};
+  // Load session, room master and existing polygon
+  useEffect(() => {
+    (async () => {
+      const { data: s } = await supabase.auth.getSession();
+      const u = s.session?.user;
+      if (!u) {
+        router.replace("/");
+        return;
+      }
+      setUserId(u.id);
 
-	const handleDeleted = () => {
-		if (!isMaster) return;
-		setPolygon([]);
-		savePolygon([]);
-	};
+      const { data: room, error } = await supabase
+        .from("rooms")
+        .select("master_id, polygon_geojson")
+        .eq("room_code", code)
+        .single();
+      if (error || !room) {
+        router.replace("/home");
+        return;
+      }
+      setMasterId(room.master_id);
+      setPolygon(geoJSONToPositions(room.polygon_geojson));
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code]);
 
-	if (!isClient) {
-		return (
-			<div className="flex flex-col items-center justify-center min-h-screen bg-zinc-50 dark:bg-black">
-				<div className="text-zinc-900 dark:text-zinc-100">Loading map...</div>
-			</div>
-		);
-	}
+  // Realtime: listen for polygon updates
+  useEffect(() => {
+    if (!code) return;
+    const channel = supabase
+      .channel(`map-${code}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "rooms", filter: `room_code=eq.${code}` },
+        (payload) => {
+          const poly = (payload.new as any)?.polygon_geojson ?? null;
+          setPolygon(geoJSONToPositions(poly));
+        }
+      )
+      .subscribe();
+    return () => void supabase.removeChannel(channel);
+  }, [code]);
 
-	return (
-		<div className="flex flex-col items-center justify-center min-h-screen bg-zinc-50 dark:bg-black p-6">
-			<div className="w-full max-w-6xl">
-				<div className="mb-4 flex items-center justify-between">
-					<h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">Select Area on Map</h1>
-					<Link href="/user-info" className="text-sm text-zinc-600 dark:text-zinc-300 hover:underline">
-						Back to user info
-					</Link>
-				</div>
+  // Any time the polygon state changes (including from realtime), recompute area + validity + color
+  useEffect(() => {
+    (async () => {
+      if (polygon.length >= 3) {
+        const km2 = await computeAreaKm2(polygon);
+        const rounded = Number(km2.toFixed(6));
+        setAreaKm2(rounded);
+        const color = km2 > WARN_THRESHOLD_KM2 ? "#ef4444" : "#2563eb";
+        setPolygonColor(color);
+        setIsValid(km2 <= MAX_THRESHOLD_KM2);
+      } else {
+        setAreaKm2(null);
+        setIsValid(true);
+        setPolygonColor("#2563eb");
+      }
+      setSendSuccess(false);
+      setSendError(null);
+    })();
+  }, [polygon]);
 
-				<div className="w-full h-[70vh] rounded-lg border border-black/[.08] dark:border-white/[.145] shadow-md overflow-hidden">
-					<MapContainer
-						center={[24.4539, 54.3773]}
-						zoom={12}
-						scrollWheelZoom={true}
-						style={{ height: "100%", width: "100%" }}
-					>
-						<TileLayer
-							attribution='&copy; <a href="https://www.maptiler.com/copyright/">MapTiler</a> | &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-							url={`https://api.maptiler.com/maps/basic-v2/{z}/{x}/{y}.png?key=${process.env.NEXT_PUBLIC_MAPTILER_KEY}`}
-							tileSize={512}
-							zoomOffset={-1}
-							maxZoom={19}
-						/>
-						<FeatureGroup>
-							{isMaster && (
-								<EditControl
-									position="topright"
-									onCreated={handleCreated}
-									onEdited={handleEdited}
-									onDeleted={handleDeleted}
-									draw={{
-										rectangle: false,
-										circle: false,
-										marker: false,
-										circlemarker: false,
-										polyline: false,
-										polygon: {
-											allowIntersection: false,
-											showArea: true,
-											shapeOptions: { color: "#2563eb" },
-										},
-									}}
-									edit={{
-										edit: true,
-										remove: true,
-									}}
-								/>
-							)}
-							{polygon.length > 0 && (
-								<Polygon positions={polygon.map((p) => [p.lat, p.lon]) as any} color="#2563eb" />
-							)}
-						</FeatureGroup>
-					</MapContainer>
-				</div>
+  const toJsonCoords = (latlngs: any[]) => latlngs.map((ll: any) => ({ lat: ll.lat, lon: ll.lng }));
 
-				{polygon.length > 0 && (
-					<pre className="mt-4 p-4 bg-white dark:bg-zinc-9 00 border border-black/[.08] dark:border-white/[.145] rounded-lg text-sm overflow-x-auto text-zinc-900 dark:text-zinc-100">
-						{JSON.stringify(polygon, null, 2)}
-					</pre>
-				)}
-			</div>
-		</div>
-	);
+  // Remove all polygon-like layers from the feature group except the edit control itself.
+  const removeExistingPolygons = () => {
+    const fg = fgRef.current;
+    if (!fg) return;
+    try {
+      const layers = fg.getLayers ? fg.getLayers() : [];
+      layers.forEach((lyr: any) => {
+        if (lyr && typeof lyr.getLatLngs === "function") {
+          fg.removeLayer(lyr);
+        }
+      });
+    } catch {
+      try {
+        if (typeof fg.clearLayers === "function") fg.clearLayers();
+      } catch {
+        // ignore
+      }
+    }
+  };
+
+  // Master-only: save polygon to Supabase (debounced)
+  const savePolygon = (positions: LatLon[]) => {
+    if (!isMaster) return;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(async () => {
+      const feature = positionsToGeoJSON(positions);
+      await supabase.from("rooms").update({ polygon_geojson: feature }).eq("room_code", code).eq("master_id", userId);
+    }, 400);
+  };
+
+  // Handle create/edit/delete (master only)
+  const handleCreated = async (e: any) => {
+    if (!isMaster) return;
+    const { layerType, layer } = e;
+    if (layerType === "polygon") {
+      // ensure single polygon on map
+      const fg = fgRef.current;
+      if (fg && fg.getLayers) {
+        try {
+          const layers = fg.getLayers();
+          layers.forEach((lyr: any) => {
+            if (lyr !== layer && typeof lyr.getLatLngs === "function") {
+              fg.removeLayer(lyr);
+            }
+          });
+        } catch {
+          try {
+            if (typeof fg.clearLayers === "function") fg.clearLayers();
+            if (typeof fg.addLayer === "function") fg.addLayer(layer);
+          } catch {
+            // ignore
+          }
+        }
+      }
+
+      const latlngs = layer.getLatLngs()[0];
+      const next = toJsonCoords(latlngs);
+      setPolygon(next);
+      savePolygon(next);
+
+      // live edit updates
+      layer.on("edit", () => {
+        const updated = layer.getLatLngs()[0];
+        const positions = toJsonCoords(updated);
+        setPolygon(positions);
+        savePolygon(positions);
+      });
+
+      lastLayerRef.current = layer;
+    }
+  };
+
+  const handleEdited = async (e: any) => {
+    if (!isMaster) return;
+    const layers = e.layers;
+    layers.eachLayer((layer: any) => {
+      if (typeof layer.getLatLngs === "function") {
+        const latlngs = layer.getLatLngs()[0];
+        const next = toJsonCoords(latlngs);
+        setPolygon(next);
+        savePolygon(next);
+
+        layer.on("edit", () => {
+          const updated = layer.getLatLngs()[0];
+          const positions = toJsonCoords(updated);
+          setPolygon(positions);
+          savePolygon(positions);
+        });
+
+        lastLayerRef.current = layer;
+      }
+    });
+  };
+
+  const handleDeleted = () => {
+    if (!isMaster) return;
+    setPolygon([]);
+    savePolygon([]);
+    setAreaKm2(null);
+    setIsValid(true);
+    setPolygonColor("#2563eb");
+    lastLayerRef.current = null;
+    setSendSuccess(false);
+    setSendError(null);
+  };
+
+  // Intercept the Leaflet Draw "delete" (bin/trash) to behave like clear (master only)
+  useEffect(() => {
+    if (!isClient || !isMaster) return;
+    const clickHandler = (e: MouseEvent) => {
+      const target = (e.target as HTMLElement) || null;
+      const deleteBtn = target?.closest(
+        ".leaflet-draw-delete, .leaflet-draw-toolbar a.leaflet-draw-delete, .leaflet-draw-toolbar a[title='Delete layers']"
+      ) as HTMLElement | null;
+
+      if (!deleteBtn) return;
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        removeExistingPolygons();
+        handleDeleted();
+      } catch {
+        // ignore
+      }
+      return false;
+    };
+    document.addEventListener("click", clickHandler, true);
+    return () => document.removeEventListener("click", clickHandler, true);
+  }, [isClient, isMaster]); // only attach for master
+
+  if (!isClient) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-zinc-50 dark:bg-black">
+        <div className="text-zinc-900 dark:text-zinc-100">Loading map...</div>
+      </div>
+    );
+  }
+
+  // Build payload for server: [{ lat, lng }, ...]
+  const buildPayloadForServer = () => polygon.map((p) => ({ lat: p.lat, lng: p.lon }));
+
+  const BACKEND_BASE = (process.env.NEXT_PUBLIC_BACKEND_URL ?? "").replace(/\/$/, "");
+
+  const handleSendToBackend = async () => {
+    if (!isMaster || polygon.length === 0 || !isValid) return;
+    setIsSending(true);
+    setSendError(null);
+    setSendSuccess(false);
+
+    try {
+      const payload = buildPayloadForServer();
+      const url = BACKEND_BASE !== "" ? `${BACKEND_BASE}/api/map/set_sample` : "/api/map/set_sample";
+
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!resp.ok) {
+        const text = await resp.text();
+        setSendError(`Server returned ${resp.status}: ${text}`);
+        setIsSending(false);
+        return;
+      }
+
+      await resp.json();
+      setIsSending(false);
+      setSendSuccess(true);
+    } catch (err: any) {
+      setIsSending(false);
+      setSendError(String(err));
+    }
+  };
+
+  const polygonCount = polygon.length > 0 ? 1 : 0;
+  const areaText = areaKm2 === null ? "—" : `${areaKm2.toFixed(4)} km²`;
+
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-zinc-50 dark:bg-black p-6">
+      <div className="w-full max-w-6xl">
+        <div className="mb-4 flex items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
+              Select Area on Map
+            </h1>
+            <div className="mt-1 flex items-center gap-4">
+              <div className="text-sm text-zinc-600 dark:text-zinc-300">
+                Area:{" "}
+                <span className="font-medium text-zinc-900 dark:text-zinc-100">{areaText}</span>
+              </div>
+              <div className="text-sm text-zinc-600 dark:text-zinc-300">
+                Polygons:{" "}
+                <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-black/5 dark:bg-white/5 text-zinc-900 dark:text-zinc-100">
+                  {polygonCount}/1
+                </span>
+              </div>
+              {!isMaster && (
+                <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                  View-only mode — only the room owner can edit.
+                </div>
+              )}
+            </div>
+          </div>
+
+          <Link href="/user-info" className="text-sm text-zinc-600 dark:text-zinc-300 hover:underline">
+            Back to user info
+          </Link>
+        </div>
+
+        {/* Banner shown when above warn threshold */}
+        {bannerVisible && (
+          <div className="mb-4 p-3 rounded-md bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 text-red-800 dark:text-red-200">
+            The polygon you've selected is too large, please shrink it to continue!
+          </div>
+        )}
+
+        <div className="w-full h-[70vh] rounded-lg border border-black/[.08] dark:border-white/[.145] shadow-md overflow-hidden">
+          <MapContainer
+            center={[24.4539, 54.3773]}
+            zoom={12}
+            scrollWheelZoom={true}
+            style={{ height: "100%", width: "100%" }}
+          >
+            <TileLayer
+              attribution='&copy; <a href="https://www.maptiler.com/copyright/">MapTiler</a> | &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              url={`https://api.maptiler.com/maps/basic-v2/{z}/{x}/{y}.png?key=${process.env.NEXT_PUBLIC_MAPTILER_KEY}`}
+              tileSize={512}
+              zoomOffset={-1}
+              maxZoom={19}
+            />
+            <FeatureGroup ref={(ref: any) => (fgRef.current = ref && (ref.leafletElement ?? ref))}>
+              {isMaster && (
+                <EditControl
+                  position="topright"
+                  onCreated={handleCreated}
+                  onEdited={handleEdited}
+                  onDeleted={handleDeleted}
+                  draw={{
+                    rectangle: false,
+                    circle: false,
+                    marker: false,
+                    circlemarker: false,
+                    polyline: false,
+                    polygon: {
+                      allowIntersection: false,
+                      showArea: true,
+                      shapeOptions: { color: "#2563eb" },
+                    },
+                  }}
+                  edit={{ edit: true, remove: true }}
+                />
+              )}
+              {polygon.length > 0 && (
+                <Polygon positions={polygon.map((p) => [p.lat, p.lon]) as any} pathOptions={{ color: polygonColor }} />
+              )}
+            </FeatureGroup>
+          </MapContainer>
+        </div>
+
+        <div className="mt-4 flex items-start gap-4">
+          {/* Continue button is MASTER-ONLY */}
+          {isMaster && (
+            <button
+              onClick={handleSendToBackend}
+              disabled={polygon.length === 0 || !isValid || isSending}
+              className={`px-4 py-2 rounded-md font-medium shadow-sm text-white ${
+                polygon.length === 0 || !isValid || isSending ? "bg-zinc-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"
+              }`}
+            >
+              {isSending ? "Sending..." : "Continue"}
+            </button>
+          )}
+
+          <div className="flex-1">
+            {sendSuccess && (
+              <div className="text-sm text-green-700 dark:text-green-300">
+                Polygon saved to server SAMPLE_DATA.
+              </div>
+            )}
+            {sendError && (
+              <div className="text-sm text-red-700 dark:text-red-300">
+                Error saving polygon: {sendError}
+              </div>
+            )}
+
+            {/* JSON visible only when valid */}
+            {polygon.length > 0 && isValid && (
+              <div className="mt-2">
+                <pre className="p-4 bg-white dark:bg-zinc-900 border border-black/[.08] dark:border-white/[.145] rounded-lg text-sm overflow-x-auto text-zinc-900 dark:text-zinc-100">
+                  {JSON.stringify(polygon, null, 2)}
+                </pre>
+                <div className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">
+                  Area is measured in <span className="font-medium">square kilometres (km²)</span>. Polygons larger than{" "}
+                  {WARN_THRESHOLD_KM2} km² will show a warning and turn red. Polygons larger than {MAX_THRESHOLD_KM2} km² are{" "}
+                  <span className="font-medium">invalid</span> and their JSON coordinates will not be shown or sent.
+                </div>
+              </div>
+            )}
+
+            {/* If polygon exists but invalid, explain why JSON is hidden */}
+            {polygon.length > 0 && !isValid && (
+              <div className="mt-2 p-4 rounded-md bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 text-yellow-900 dark:text-yellow-100 text-sm">
+                This polygon is larger than {MAX_THRESHOLD_KM2} km² and therefore its coordinates are not available here. Please
+                shrink it to see and use the JSON coordinates.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
