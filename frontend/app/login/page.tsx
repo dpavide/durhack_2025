@@ -37,14 +37,14 @@ export default function LoginPage() {
       if (mode === "signup") {
         const { error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
-        setMsg("Check your email to confirm your account before signing in.");
+        router.replace("/user-info");
+        return;
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
         if (error) {
-          // Common cause: email confirmation required
           const text = (error.message || "").toLowerCase().includes("invalid")
             ? "Invalid credentials or email not confirmed. If you just signed up, confirm via the email sent to you."
             : error.message;

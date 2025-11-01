@@ -17,7 +17,7 @@ function UserMenu({ email }: { email: string }) {
     <div className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-2 rounded-md border border-black/[.08] px-3 py-1.5 text-sm transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-300 dark:hover:bg-[#1a1a1a]"
+        className="inline-flex items-center gap-2 rounded-md border border-black/[.08] px-3 py-2 text-sm transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-300 dark:hover:bg-[#1a1a1a]"
       >
         <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-zinc-200 dark:bg-zinc-700">
           <svg
@@ -35,41 +35,28 @@ function UserMenu({ email }: { email: string }) {
         <span className="max-w-[180px] truncate">{email}</span>
       </button>
       {open && (
-        <div className="absolute right-0 z-10 mt-2 w-40 rounded-md border border-black/[.08] bg-white p-1 shadow-md dark:border-white/[.145] dark:bg-black">
-          <button
-            className="w-full rounded px-3 py-2 text-left text-sm hover:bg-black/[.04] dark:hover:bg-[#1a1a1a]"
-            onClick={async () => {
-              await supabase.auth.signOut();
-              setOpen(false);
-            }}
-          >
-            Log out
-          </button>
+        <div className="absolute right-0 z-10 mt-2 w-48 rounded-md border border-black/[.08] bg-white shadow-lg dark:border-white/[.145] dark:bg-zinc-900">
+          <div className="py-1">
+            <Link
+              href="/user-info"
+              onClick={() => setOpen(false)}
+              className="block w-full px-4 py-2 text-left text-sm text-zinc-700 hover:bg-black/[.04] dark:text-zinc-300 dark:hover:bg-[#1a1a1a]"
+            >
+              User info
+            </Link>
+            <button
+              className="block w-full px-4 py-2 text-left text-sm text-zinc-700 hover:bg-black/[.04] dark:text-zinc-300 dark:hover:bg-[#1a1a1a]"
+              onClick={async () => {
+                await supabase.auth.signOut();
+                setOpen(false);
+              }}
+            >
+              Sign out
+            </button>
+          </div>
         </div>
       )}
     </div>
-  );
-}
-
-function Header({ session }: { session: Session | null }) {
-  return (
-    <header className="w-full mb-8 flex items-center justify-between">
-      <div className="text-base font-semibold text-black dark:text-zinc-50">
-        Meetings
-      </div>
-      <nav className="ml-auto">
-        {session ? (
-          <UserMenu email={session.user.email ?? session.user.id} />
-        ) : (
-          <Link
-            href="/login"
-            className="inline-flex h-9 items-center rounded-md border border-black/[.08] px-3 text-sm transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-300 dark:hover:bg-[#1a1a1a]"
-          >
-            Sign in / Sign up
-          </Link>
-        )}
-      </nav>
-    </header>
   );
 }
 
@@ -91,7 +78,20 @@ export default function Home() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
       <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Header session={session} />
+        {/* Auth panel */}
+        <div className="w-full mb-8 flex justify-end">
+          {session ? (
+            <UserMenu email={session.user.email ?? session.user.id} />
+          ) : (
+            <Link
+              href="/login"
+              className="inline-flex h-10 items-center rounded-md border border-black/[.08] px-4 text-sm transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
+            >
+              Sign Up / Login
+            </Link>
+          )}
+        </div>
+
         <Image
           className="dark:invert"
           src="/next.svg"
