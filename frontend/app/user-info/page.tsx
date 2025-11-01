@@ -65,6 +65,13 @@ export default function UserInfoPage() {
           </form>
         </div>
 
+        <Link
+          href="/map"
+          className="mt-4 block w-full text-center rounded-md border border-black/[.08] px-4 py-2 text-sm transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
+        >
+          Select Area on Map
+        </Link>
+
         <Link href="/" className="mt-4 block text-sm text-zinc-600 dark:text-zinc-300">
           Back to home
         </Link>
