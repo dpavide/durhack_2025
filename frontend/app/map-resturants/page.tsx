@@ -7,7 +7,9 @@ import "leaflet-draw/dist/leaflet.draw.css";
 import L from "leaflet";
 import { useMapEvents } from "react-leaflet";
 
-// dynamic imports to avoid SSR issues
+/* ---------------------------
+   Dynamic imports (SSR-safe)
+---------------------------- */
 const MapContainer = dynamic(
   () => import("react-leaflet").then((m) => m.MapContainer),
   { ssr: false }
@@ -32,13 +34,12 @@ const Popup = dynamic(
   () => import("react-leaflet").then((m) => m.Popup),
   { ssr: false }
 );
-// react-leaflet-draw control
-const EditControl = dynamic(
-  // @ts-ignore
-  () => import("react-leaflet-draw").then((m: any) => m.EditControl),
-  { ssr: false }
-);
+// @ts-ignore
+const EditControl = dynamic(() => import("react-leaflet-draw").then((m: any) => m.EditControl), { ssr: false });
 
+/* ---------------------------
+   Types
+---------------------------- */
 type Pin = {
   id: string;
   lat: number;
@@ -46,11 +47,14 @@ type Pin = {
   name?: string;
   website?: string;
   tags?: Record<string, string>;
+  source?: "json" | "user";
 };
 
 const LS_KEY = "map_pins_v1";
 
-/** v4 way to listen to clicks */
+/* ---------------------------
+   Listen to map clicks (for user pins)
+---------------------------- */
 function ClickBinder({
   enabled,
   onClick,
@@ -67,6 +71,179 @@ function ClickBinder({
   return null;
 }
 
+/* ---------------------------
+   Hardcoded JSON (your data)
+---------------------------- */
+const OSM_DATA = {
+  elements: [
+    {
+      type: "node",
+      id: 245554603,
+      lat: 52.4782744,
+      lon: -1.9126816,
+      tags: {
+        "addr:city": "Birmingham",
+        "addr:postcode": "B1 2HL",
+        "addr:street": "The Waters Edge",
+        amenity: "restaurant",
+        brand: "Las Iguanas",
+        "brand:wikidata": "Q19875012",
+        "brand:wikipedia": "en:Las Iguanas",
+        check_date: "2024-07-16",
+        "check_date:opening_hours": "2024-07-16",
+        cuisine: "Latin American",
+        "fhrs:id": "1315589",
+        name: "Las Iguanas",
+        opening_hours:
+          "Mo-Tu 11:00-21:30; We-Th 11:00-22:00; Fr-Sa 11:00-22:30; Su 11:00-21:30",
+        source: "local knowledge",
+        website:
+          "https://www.iguanas.co.uk/restaurants/birmingham-brindley-place/",
+      },
+    },
+    {
+      type: "node",
+      id: 310674206,
+      lat: 52.4801211,
+      lon: -1.8990618,
+      tags: {
+        "addr:city": "Birmingham",
+        "addr:housenumber": "39-40",
+        "addr:postcode": "B2 5DP",
+        "addr:street": "Temple Street",
+        amenity: "restaurant",
+        brand: "Las Iguanas",
+        "brand:wikidata": "Q19875012",
+        check_date: "2024-07-16",
+        "check_date:opening_hours": "2024-07-16",
+        cuisine: "latin_american",
+        "fhrs:id": "1368302",
+        name: "Las Iguanas",
+        opening_hours:
+          "Mo-Tu 11:00-21:30; We-Th 11:00-22:00; Fr-Sa 11:00-22:30; Su 11:00-21:30",
+        phone: "+44 1218 034883",
+        source: "survey",
+        "source:addr": "FHRS Open Data",
+        website: "https://www.iguanas.co.uk/restaurants/birmingham-templest/",
+      },
+    },
+    {
+      type: "node",
+      id: 310675208,
+      lat: 52.4791439,
+      lon: -1.9012564,
+      tags: {
+        "addr:city": "Birmingham",
+        "addr:housenumber": "5A",
+        "addr:postcode": "B2 4BG",
+        "addr:street": "Ethel Street",
+        amenity: "restaurant",
+        cuisine: "italian",
+        "fhrs:id": "720216",
+        name: "La Galleria",
+        source: "survey",
+        website: "http://www.lagalleria-birmingham.co.uk/",
+      },
+    },
+    {
+      type: "node",
+      id: 312747309,
+      lat: 52.480468,
+      lon: -1.8955226,
+      tags: {
+        "addr:city": "Birmingham",
+        "addr:housename": "Martineau Square",
+        "addr:housenumber": "25",
+        "addr:postcode": "B2 4UH",
+        "addr:street": "Martineau Place",
+        amenity: "restaurant",
+        name: "Al Arabi Grill House",
+        source: "survey",
+      },
+    },
+    {
+      type: "node",
+      id: 316757450,
+      lat: 52.4829112,
+      lon: -1.9044436,
+      tags: {
+        amenity: "restaurant",
+        name: "Milan",
+        source: "survey",
+      },
+    },
+    {
+      type: "node",
+      id: 316757451,
+      lat: 52.4832031,
+      lon: -1.9056854,
+      tags: {
+        "addr:city": "Birmingham",
+        "addr:housenumber": "18",
+        "addr:street": "Fleet Street",
+        amenity: "restaurant",
+        name: "Itihaas",
+        source: "survey",
+        website: "https://www.itihaas.co.uk/",
+      },
+    },
+    {
+      type: "node",
+      id: 330239419,
+      lat: 52.4844431,
+      lon: -1.9082153,
+      tags: {
+        amenity: "restaurant",
+        name: "Rayu Pan-Asian",
+        source: "survey",
+      },
+    },
+    {
+      type: "node",
+      id: 330256376,
+      lat: 52.4836495,
+      lon: -1.9109322,
+      tags: {
+        "addr:city": "Birmingham",
+        "addr:postcode": "B1 3JH",
+        "addr:street": "Newhall Hill",
+        amenity: "restaurant",
+        email: "hello@vaultsbirmingham.com",
+        name: "The Vaults",
+        phone: "+44 121 212 9837",
+        source: "survey",
+      },
+    },
+    {
+      type: "node",
+      id: 330256383,
+      lat: 52.4816163,
+      lon: -1.9075252,
+      tags: {
+        amenity: "restaurant",
+        check_date: "2024-09-01",
+        name: "Opheem",
+        source: "survey",
+      },
+    },
+    {
+      type: "node",
+      id: 352650628,
+      lat: 52.4775658,
+      lon: -1.9130375,
+      tags: {
+        amenity: "restaurant",
+        cuisine: "thai",
+        name: "Thai Edge",
+        source: "survey",
+      },
+    },
+  ],
+};
+
+/* ---------------------------
+   Component
+---------------------------- */
 export default function MapPage() {
   const [polygon, setPolygon] = useState<any[]>([]);
   const [pinMode, setPinMode] = useState(false);
@@ -75,8 +252,7 @@ export default function MapPage() {
   const markerIcon = useMemo(
     () =>
       new L.Icon({
-        iconUrl:
-          "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+        iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
         shadowUrl:
           "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
         iconSize: [25, 41],
@@ -86,13 +262,32 @@ export default function MapPage() {
     []
   );
 
-  // restore/save pins
+  // 1) On first mount, load hardcoded JSON markers
+  useEffect(() => {
+    const fromJson: Pin[] = OSM_DATA.elements.map((el: any) => ({
+      id: String(el.id),
+      lat: el.lat,
+      lon: el.lon,
+      name: el.tags?.name,
+      website: el.tags?.website,
+      tags: el.tags,
+      source: "json",
+    }));
+    setPins(fromJson);
+  }, []);
+
+  // 2) Also restore user-added pins from localStorage (and merge)
   useEffect(() => {
     const raw = localStorage.getItem(LS_KEY);
-    if (raw) setPins(JSON.parse(raw));
+    if (!raw) return;
+    const saved: Pin[] = JSON.parse(raw).filter((p: Pin) => p.source === "user");
+    setPins((curr) => [...curr, ...saved]);
   }, []);
+
+  // persist user pins only
   useEffect(() => {
-    localStorage.setItem(LS_KEY, JSON.stringify(pins));
+    const onlyUser = pins.filter((p) => p.source === "user");
+    localStorage.setItem(LS_KEY, JSON.stringify(onlyUser));
   }, [pins]);
 
   const handleCreated = (e: any) => {
@@ -126,38 +321,20 @@ export default function MapPage() {
 
     setPins((prev) => [
       ...prev,
-      { id: crypto.randomUUID(), lat, lon: lng, name, website, tags },
+      { id: crypto.randomUUID(), lat, lon: lng, name, website, tags, source: "user" },
     ]);
   };
 
-  const loadFromJson = async () => {
-    try {
-      const res = await fetch("/api/restaurants.json");
-      const data = await res.json();
-      if (!data?.elements) return;
-      const imported: Pin[] = data.elements.map((el: any) => ({
-        id: String(el.id),
-        lat: el.lat,
-        lon: el.lon,
-        name: el.tags?.name,
-        website: el.tags?.website,
-        tags: el.tags,
-      }));
-      const existing = new Set(pins.map((p) => p.id));
-      setPins((prev) => [...prev, ...imported.filter((p) => !existing.has(p.id))]);
-      alert("Loaded markers from JSON");
-    } catch {
-      alert("Failed to load /api/restaurants.json");
+  const clearUserPins = () => {
+    if (confirm("Clear user pins (keeps JSON pins)?")) {
+      const keepJson = pins.filter((p) => p.source === "json");
+      setPins(keepJson);
+      localStorage.removeItem(LS_KEY);
     }
-  };
-
-  const clearPins = () => {
-    if (confirm("Clear all pins?")) setPins([]);
   };
 
   return (
     <div className="min-h-screen bg-zinc-50">
-      {/* Header with the BUTTONS you asked for */}
       <div className="mx-auto max-w-6xl px-4 pt-8 pb-4 flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Select Area on Map</h1>
         <div className="flex gap-2">
@@ -172,17 +349,12 @@ export default function MapPage() {
           >
             {pinMode ? "Pin mode: ON" : "Pin mode: OFF"}
           </button>
-          <button
-            className="px-4 py-2 rounded-full text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700"
-            onClick={loadFromJson}
-          >
-            Load from JSON
-          </button>
+
           <button
             className="px-4 py-2 rounded-full text-sm font-medium bg-rose-600 text-white hover:bg-rose-700"
-            onClick={clearPins}
+            onClick={clearUserPins}
           >
-            Clear pins
+            Clear user pins
           </button>
         </div>
       </div>
@@ -190,8 +362,9 @@ export default function MapPage() {
       <div className="mx-auto max-w-6xl px-4 pb-8">
         <div className="w-full h-[78vh] rounded-xl shadow overflow-hidden">
           <MapContainer
-            center={[53.5, -1.5]}
-            zoom={7}
+            // Birmingham-ish
+            center={[52.48, -1.90]}
+            zoom={13}
             style={{ height: "100%", width: "100%" }}
           >
             <TileLayer
@@ -199,7 +372,6 @@ export default function MapPage() {
               url={`https://api.maptiler.com/maps/basic-v2/256/{z}/{x}/{y}.png?key=${process.env.NEXT_PUBLIC_MAPTILER_KEY}`}
             />
 
-            {/* Clicks handled here when pinMode is ON */}
             <ClickBinder enabled={pinMode} onClick={addPin} />
 
             <FeatureGroup>
@@ -224,53 +396,75 @@ export default function MapPage() {
               )}
             </FeatureGroup>
 
-            {/* Render user pins (open popup on hover) */}
-            {pins.map((p) => (
-              <Marker
-                key={p.id}
-                position={[p.lat, p.lon]}
-                icon={markerIcon}
-                eventHandlers={{
-                  mouseover: (e) => e.target.openPopup(),
-                  mouseout: (e) => e.target.closePopup(),
-                }}
-              >
-                <Popup>
-                  <div className="text-sm leading-5">
-                    <p className="text-lg font-bold mb-1">
-                      {p.name || "Pinned point"}
-                    </p>
-                    <p className="text-zinc-600 -mt-1 mb-2">
-                      {p.lat.toFixed(6)}, {p.lon.toFixed(6)} (lat/lon)
-                    </p>
-                    {p.tags && (
-                      <>
-                        <p className="font-semibold">Tags</p>
-                        <ul className="mb-2">
-                          {Object.entries(p.tags).map(([k, v]) => (
-                            <li key={k}>
-                              <strong>{k}</strong> = {String(v)}
-                            </li>
-                          ))}
-                        </ul>
-                      </>
-                    )}
-                    {p.website && (
-                      <p className="truncate">
+            {/* Render both JSON pins + user pins */}
+            {pins.map((p) => {
+              const tagEntries = Object.entries(p.tags || {});
+              const tagCount = tagEntries.length;
+
+              return (
+                <Marker
+                  key={p.id}
+                  position={[p.lat, p.lon]}
+                  icon={markerIcon}
+                  eventHandlers={{
+                    mouseover: (e) => e.target.openPopup(),
+                    mouseout: (e) => e.target.closePopup(),
+                  }}
+                >
+                  <Popup>
+                    <div className="text-sm leading-5">
+                      {/* Title line similar to screenshot */}
+                      <p className="text-xl font-extrabold">
+                        Node{" "}
                         <a
-                          href={p.website}
+                          href={`https://www.openstreetmap.org/node/${p.id}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-blue-600 underline break-all"
+                          className="text-sky-700 underline"
                         >
-                          {p.website}
-                        </a>
+                          {p.id}
+                        </a>{" "}
+                        —
                       </p>
-                    )}
-                  </div>
-                </Popup>
-              </Marker>
-            ))}
+
+                      {/* Tags header */}
+                      <p className="mt-2 text-lg font-bold">
+                        Tags <span className="ml-2 text-indigo-600 font-semibold">{tagCount}</span>
+                      </p>
+
+                      {/* Key=value list */}
+                      <div className="font-mono whitespace-pre-wrap">
+                        {tagEntries.map(([k, v]) => (
+                          <div key={k}>
+                            {k} = {String(v)}
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Website */}
+                      {p.website && (
+                        <div className="mt-2">
+                          <a
+                            className="text-blue-600 underline break-all"
+                            href={p.website}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            {p.website}
+                          </a>
+                        </div>
+                      )}
+
+                      {/* Coords */}
+                      <p className="mt-3 text-2xl font-bold">Coordinates</p>
+                      <p className="text-sky-700 font-semibold">
+                        {p.lat.toFixed(6)} / {p.lon.toFixed(6)} <span className="text-zinc-600 text-xs">(lat/lon)</span>
+                      </p>
+                    </div>
+                  </Popup>
+                </Marker>
+              );
+            })}
           </MapContainer>
         </div>
       </div>
