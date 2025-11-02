@@ -261,15 +261,13 @@ export default function ResultPage() {
   const [userGpsPosition, setUserGpsPosition] = useState<LatLngExpression | null>(null); // NEW state
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
-  /* ---------------------------
-     Core Fetching and Winner Calculation 
-  ---------------------------- */
+
+  const defaultCenter: LatLngExpression = [54.7753, -1.584];
+
   const fetchWinnerDetails = useCallback(async (roomCode: string) => {
     if (!roomCode) return;
-    
+
     try {
-      // 1. Fetch total participants
       const { count: totalParticipants } = await supabase
         .from("room_participants")
         .select("user_id", { count: "exact", head: true })
@@ -279,7 +277,6 @@ export default function ResultPage() {
         throw new Error("Cannot determine winner: No participants found.");
       }
 
-      // 2. Fetch all votes
       const { data: votesData } = await supabase
         .from("place_votes")
         .select("place_id")
@@ -289,7 +286,6 @@ export default function ResultPage() {
         throw new Error("Error fetching votes.");
       }
 
-      // 3. Calculate vote counts and find unanimous winner ID
       const voteCounts = new Map<string, number>();
       for (const vote of votesData) {
         const id = String(vote.place_id);
@@ -308,25 +304,23 @@ export default function ResultPage() {
         throw new Error("No unanimous winner found. Voting may still be in progress.");
       }
 
-      // 4. Fetch the selections to get coordinates (lat/lon)
       const { data: selectionsData } = await supabase
         .from("player_selections")
         .select("selections")
         .eq("session_id", roomCode)
-        .limit(1); 
+        .limit(1);
 
       if (!selectionsData || selectionsData.length === 0) {
         throw new Error("Could not retrieve place coordinates.");
       }
-      
+
       const selections: SelectionPin[] = selectionsData[0].selections || [];
-      const winnerPin = selections.find(pin => String(pin.id) === winningPlaceId);
+      const winnerPin = selections.find((pin) => String(pin.id) === winningPlaceId);
 
       if (!winnerPin || winnerPin.lat === undefined || winnerPin.lon === undefined) {
-          throw new Error("Winner coordinates not found in player selections.");
+        throw new Error("Winner coordinates not found in player selections.");
       }
 
-      // 5. Set the final winner state
       setWinnerPlace({
         element_id: winningPlaceId,
         name: winnerPin.name || "The Chosen Location",
@@ -334,7 +328,6 @@ export default function ResultPage() {
         lon: winnerPin.lon,
       });
       setError(null);
-
     } catch (err: any) {
       console.error("Error in final result calculation:", err);
       setError(err.message || "Failed to finalize the meeting location.");
@@ -349,20 +342,27 @@ export default function ResultPage() {
       return;
     }
     fetchWinnerDetails(code);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [code, router]);
-  
-  /* ---------------------------
-     Render Logic
-  ---------------------------- */
+  }, [code, router, fetchWinnerDetails]);
+
+  const mapCenter: LatLngExpression = winnerPlace ? [winnerPlace.lat, winnerPlace.lon] : defaultCenter;
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <script src="https://cdn.tailwindcss.com"></script>
         <div className="text-center p-6 bg-white rounded-xl shadow-xl">
-          <svg className="animate-spin h-8 w-8 text-blue-600 mx-auto mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <svg
+            className="animate-spin h-8 w-8 text-blue-600 mx-auto mb-3"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            <path
+              className="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+            ></path>
           </svg>
           <p className="text-gray-700 font-medium">Calculating final consensus...</p>
         </div>
@@ -373,21 +373,20 @@ export default function ResultPage() {
   if (error || !winnerPlace) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-red-50">
-         <script src="https://cdn.tailwindcss.com"></script>
-         <div className="text-center p-6 bg-white rounded-xl shadow-xl">
-           <h1 className="text-2xl font-bold text-red-700 mb-2">Error Finalizing Result</h1>
-           <p className="text-red-600 font-medium">{error || "No unanimous winner determined."}</p>
-           <button 
-             onClick={() => router.replace(`/listings/${code}`)}
-             className="mt-4 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
-           >
-             Return to Voting
-           </button>
-         </div>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <div className="text-center p-6 bg-white rounded-xl shadow-xl">
+          <h1 className="text-2xl font-bold text-red-700 mb-2">Error Finalizing Result</h1>
+          <p className="text-red-600 font-medium">{error || "No unanimous winner determined."}</p>
+          <button
+            onClick={() => router.replace(`/listings/${code}`)}
+            className="mt-4 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
+          >
+            Return to Voting
+          </button>
+        </div>
       </div>
     );
   }
-
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col font-sans">
@@ -402,38 +401,43 @@ export default function ResultPage() {
         .animate-bounce { animation: bounce 2s infinite; }
 
         /* GPS Location Marker (Pulsating Blue Dot) */
-        @keyframes pulsate {
-            0% { transform: scale(1); opacity: 1; box-shadow: 0 0 0 0 rgba(0, 128, 255, 0.7); }
-            70% { transform: scale(1.5); opacity: 0; box-shadow: 0 0 0 10px rgba(0, 128, 255, 0); }
-            100% { transform: scale(1); opacity: 0; box-shadow: 0 0 0 0 rgba(0, 128, 255, 0); }
+        @keyframes bounce {
+          0%, 20%, 50%, 80%, 100% { transform: translateY(0) scale(1); }
+          40% { transform: translateY(-30px) scale(1.1); }
+          60% { transform: translateY(-15px) scale(1.05); }
         }
-        .pulsating-dot { 
-            width: 16px; 
-            height: 16px; 
-            background-color: #007bff; 
-            border-radius: 50%; 
-            border: 2px solid #fff; 
-            box-shadow: 0 0 0 0 rgba(0, 128, 255, 0.7); 
-            animation: pulsate 2s infinite; 
+        .animate-bounce { animation: bounce 2s infinite; }
+
+        @keyframes pulsate {
+          0% { transform: scale(1); opacity: 1; box-shadow: 0 0 0 0 rgba(0, 128, 255, 0.7); }
+          70% { transform: scale(1.5); opacity: 0; box-shadow: 0 0 0 10px rgba(0, 128, 255, 0); }
+          100% { transform: scale(1); opacity: 0; box-shadow: 0 0 0 0 rgba(0, 128, 255, 0); }
+        }
+        .pulsating-dot {
+          width: 16px;
+          height: 16px;
+          background-color: #007bff;
+          border-radius: 50%;
+          border: 2px solid #fff;
+          box-shadow: 0 0 0 0 rgba(0, 128, 255, 0.7);
+          animation: pulsate 2s infinite;
         }
       `}</style>
-      
+
       <header className="p-6 bg-emerald-600 text-white shadow-xl">
         <div className="container mx-auto">
-          <h1 className="text-3xl font-extrabold flex items-center">
-            🎉 Final Destination Chosen! 🏆
-          </h1>
+          <h1 className="text-3xl font-extrabold flex items-center">🎉 Final Destination Chosen! 🏆</h1>
           <p className="mt-1 text-emerald-100">Meeting Code: {code}</p>
         </div>
       </header>
 
       <main className="container mx-auto p-4 sm:p-6 lg:p-8 flex-grow">
-        
-        {/* Winner Card */}
         <div className="mb-8 bg-white p-6 rounded-2xl shadow-2xl border-b-4 border-emerald-500 text-center">
           <h2 className="text-4xl font-black text-gray-800 mb-2">{winnerPlace.name}</h2>
           <p className="text-lg text-gray-600">This is where you're going!</p>
-          <p className="text-sm text-gray-500 mt-1">GPS: {winnerPlace.lat.toFixed(5)}, {winnerPlace.lon.toFixed(5)}</p>
+          <p className="text-sm text-gray-500 mt-1">
+            GPS: {winnerPlace.lat.toFixed(5)}, {winnerPlace.lon.toFixed(5)}
+          </p>
         </div>
 
         {/* Map Display */}
@@ -449,12 +453,21 @@ export default function ResultPage() {
           )}
 
         </div>
-
       </main>
-      
+
       {/* Footer / CTA */}
-      <footer className="p-4 text-center text-gray-600">
+      <footer className="p-6 text-center text-gray-600 bg-white shadow-inner">
         <p>Planning complete. Time to meet up!</p>
+
+        {/* ✅ MAIN MENU BUTTON ADDED HERE */}
+        <div className="mt-4 flex justify-center">
+          <button
+            onClick={() => router.push("/home")}
+            className="px-6 py-3 bg-emerald-600 text-white font-semibold rounded-xl shadow-lg hover:bg-emerald-700 transition duration-200"
+          >
+          Main Menu
+          </button>
+        </div>
       </footer>
     </div>
   );
