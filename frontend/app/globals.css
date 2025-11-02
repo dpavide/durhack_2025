@@ -49,10 +49,10 @@ body {
 
 /* Optional default link tone (keeps Tailwind classes working as usual) */
 a {
-  color: #4f46e5; /* indigo-600 */
+  color: inherit; /* indigo-600 */
 }
 a:hover {
-  color: #4338ca; /* indigo-700 */
+  color: inherit; /* indigo-700 */
 }
 
 /* ---------- Reusable helpers (use anywhere) ---------- */
