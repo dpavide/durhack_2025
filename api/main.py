@@ -10,6 +10,7 @@ import os
 # Router imports (adjust paths if your project layout differs)
 from api.routers.map.overpass_routers import router as overpass_router
 from api.routers.gmap.gmaps_routers import router as gmaps_router
+from api.routers.gmap.gmaps_directions_router import router as gmaps_directions_router
 from api.routers.gemini.gemini_router import router as gemini_router
 
 # optional supabase client usage (keep as you had)
@@ -29,6 +30,7 @@ app = FastAPI(
 # the frontend calls /api/map/set_sample -> ensure router is at prefix /api/map
 app.include_router(overpass_router, prefix="/api/map", tags=["map"])
 app.include_router(gmaps_router, prefix="/api/gmap", tags=["gmap"])
+app.include_router(gmaps_directions_router, prefix="/api/gmap", tags=["gmap-directions"])
 app.include_router(gemini_router, prefix="/api/gemini", tags=["gemini"])
 
 # CORS for local dev; tighten for production
