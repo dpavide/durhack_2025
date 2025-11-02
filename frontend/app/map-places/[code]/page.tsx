@@ -40,6 +40,17 @@ const MAX_API_PINS = 10;
 const MAX_SELECTIONS = 2; // Maximum places to select
 
 /* ---------------------------
+   Tiny fix: Ensure default Marker icons are set (fixes invisible markers for some users)
+   This is the minimal necessary change to address the problem where non-admins
+   or other browsers/devices couldn't see the default marker images.
+---------------------------- */
+L.Icon.Default.mergeOptions({
+  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+});
+
+/* ---------------------------
    Helper Components
 ---------------------------- */
 function sampleUpTo<T>(arr: T[], n: number): T[] {
@@ -208,7 +219,7 @@ export default function MapPlacesPage() {
 
   /* ---------------------------
      Data Loading and Setup Effects (unchanged)
-  ---------------------------- */
+  --------------------------- */
   useEffect(() => {
     if (!sessionId) {
       setLoadError("Missing session ID in URL.");
@@ -345,8 +356,7 @@ export default function MapPlacesPage() {
         console.error("Failed to submit selections:", error.message);
     }
     
-    // CRITICAL FIX: Removed all channel subscription and logic here.
-    // The separate useEffect listener handles checking the allReady state for everyone.
+    // CRITICAL Fix: Removed channel handling here; readiness handled elsewhere
   };
 
   /* ----------------------------------------------------------------------
