@@ -11,8 +11,8 @@ class GMapSearchRequest(BaseModel):
     lng: float
     radius: Optional[int] = 100
 
-
-@router.get("/gmap/search")
+# FIX 1: Changed path from "/gmap/search" to "/search"
+@router.get("/search") 
 def gmap_search_get(
     name: str = Query(..., description="Place name to search for"),
     lat: float = Query(..., description="Latitude"),
@@ -30,8 +30,8 @@ def gmap_search_get(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
-@router.post("/gmap/search")
+# FIX 2: Changed path from "/gmap/search" to "/search"
+@router.post("/search")
 def gmap_search_post(payload: GMapSearchRequest):
     """
     Search for a place via Google Maps using JSON body.

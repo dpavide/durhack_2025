@@ -11,98 +11,6 @@ const Arrow = ({ dir = "right", className = "" }: { dir?: "right" | "down"; clas
   </span>
 );
 
-// Sample JSON data. Replace with a fetch if needed.
-const SAMPLE_DATA = {
-  gmap_results: [
-    {
-      element_id: 313076158,
-      osm_type: "node",
-      name: "La Spaghettata",
-      lat: 54.7761448,
-      lon: -1.5750704,
-      rating: 4.4,
-      reviews: [
-        {
-          author_name: "little girl",
-          author_url: "https://www.google.com/maps/contrib/106717110483583966010/reviews",
-          rating: 5,
-          relative_time_description: "3 weeks ago",
-          time: 1759913068,
-          text:
-            "A lovely Italian restaurant with amazing food! The spaghetti is super delicious, the pizza is great, and the desserts are absolutely delightful. The atmosphere is warm and cozy — perfect for a meal with friends, a date, or even family. The service is excellent too. Definitely one of my favorite spots!",
-        },
-        {
-          author_name: "Lauren Winslow",
-          author_url: "https://www.google.com/maps/contrib/105458315474297976828/reviews",
-          rating: 5,
-          relative_time_description: "2 months ago",
-          time: 1754763714,
-          text:
-            "Very tasty Italian food with lots of flavour. The portions were very generous. I opted for pasta with breaded chicken which was cooked beautifully. Lots of gluten free options available. Service was friendly but a tad rushed. We did go on a busy Friday night though.",
-        },
-      ],
-      found_on_gmaps: true,
-    },
-    {
-      element_id: 391426639,
-      osm_type: "node",
-      name: "Jozef’s Riverside Bar & Restaurant",
-      lat: 54.7806277,
-      lon: -1.57676,
-      rating: 4,
-      reviews: [
-        {
-          author_name: "Andreea Visan",
-          author_url: "https://www.google.com/maps/contrib/104528458061531317586/reviews",
-          rating: 5,
-          relative_time_description: "a year ago",
-          time: 1725499947,
-          text:
-            "We went for an afternoon tea and a spa day at Raddison Blu Hotel, and as always, had been a great experience. They refurbished the restaurant, and it looks so great. The spa day was really nice, too. Shout out to the massage therapists Clare L and Janine, who were very good. Ladies, you made our day! Thank you!! ❤",
-        },
-        {
-          author_name: "Sean Ellis",
-          author_url: "https://www.google.com/maps/contrib/115810686233235202375/reviews",
-          rating: 5,
-          relative_time_description: "3 years ago",
-          time: 1644697924,
-          text: "Great dinner. Enjoyed the new Valentines set menu. Food and service was great.",
-        },
-      ],
-      found_on_gmaps: true,
-    },
-    {
-      element_id: 940823093,
-      osm_type: "node",
-      name: "Inshanghai",
-      lat: 54.7765249,
-      lon: -1.5783341,
-      rating: 4.2,
-      reviews: [
-        {
-          author_name: "大白",
-          author_url: "https://www.google.com/maps/contrib/113039611867534865137/reviews",
-          rating: 5,
-          relative_time_description: "2 weeks ago",
-          time: 1760452925,
-          text:
-            "Great buffet spot! Tasty food, decent prices and really good value. The staff are lovely and the place is super clean. Definitely worth a visit!",
-        },
-        {
-          author_name: "Babs Babs",
-          author_url: "https://www.google.com/maps/contrib/101433001068816239284/reviews",
-          rating: 5,
-          relative_time_description: "2 months ago",
-          time: 1756568470,
-          text:
-            "We stopped here for lunch in between sightseeing in Durham (after the Cathedral and the Oriental Museum) and it was just what we needed! 🥢🍜\nThe food was fresh, tasty, and full of flavour, with a good variety to choose from. Service was quick and friendly, and the atmosphere felt relaxed – perfect for recharging after a busy morning of exploring.\nDefinitely a great spot to add to your Durham trip. I’ll remember this place not just for the food, but for saving two very hungry explorers! 😅",
-        },
-      ],
-      found_on_gmaps: true,
-    },
-  ],
-};
-
 type Place = {
   element_id: number | string;
   name: string;
@@ -114,6 +22,19 @@ type Place = {
     relative_time_description?: string;
     text?: string;
   }[];
+  // Added from player_selections 'pin' type, in case gmap fails
+  lat?: number; 
+  lon?: number;
+};
+
+// This is the type of the 'pin' object stored in player_selections.selections
+type SelectionPin = {
+  id: string;
+  lat: number;
+  lon: number;
+  name?: string;
+  tags?: Record<string, string>;
+  source?: "json" | "user";
 };
 
 export default function ListingsPage() {
@@ -126,14 +47,12 @@ export default function ListingsPage() {
   const [votes, setVotes] = useState<{ user_id: string; place_id: string }[]>([]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({}); // place_id -> expanded?
 
-  const places: Place[] = useMemo(() => {
-    return (SAMPLE_DATA?.gmap_results ?? []).map((p: any) => ({
-      element_id: String(p.element_id),
-      name: p.name,
-      rating: p.rating,
-      reviews: p.reviews || [],
-    }));
-  }, []);
+  // --- NEW: State for dynamically fetched places ---
+  const [places, setPlaces] = useState<Place[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  // --- REMOVED: useMemo for places (was hardcoded) ---
 
   const placeIdList = useMemo(() => places.map((p) => String(p.element_id)), [places]);
 
@@ -153,12 +72,12 @@ export default function ListingsPage() {
 
   const winningPlaceId = useMemo(() => {
     const total = participants.length;
-    if (total === 0) return null;
+    if (total === 0 || places.length === 0) return null; // Guard for no participants/places
     for (const pid of placeIdList) {
       if ((voteCounts.get(pid) ?? 0) >= total) return pid;
     }
     return null;
-  }, [participants.length, placeIdList, voteCounts]);
+  }, [participants.length, placeIdList, voteCounts, places.length]);
 
   const refreshParticipants = useCallback(async () => {
     if (!code) return;
@@ -185,6 +104,91 @@ export default function ListingsPage() {
     }
   }, [code]);
 
+  // --- UPDATED: Function to fetch and process listings ---
+  const fetchListings = useCallback(async (roomCode: string) => {
+    if (!roomCode) return;
+    
+    try {
+      // 1. Fetch all selections for the room
+      const { data: selectionsData, error: selectionsError } = await supabase
+        .from("player_selections")
+        .select("selections")
+        .eq("session_id", roomCode);
+
+      if (selectionsError) throw new Error(`Supabase error: ${selectionsError.message}`);
+      if (!selectionsData || selectionsData.length === 0) {
+        throw new Error("No player selections found for this session.");
+      }
+
+      // 2. Process and de-duplicate
+      const allSelections: SelectionPin[] = selectionsData.flatMap((row: any) => row.selections || []);
+      const uniquePlacesMap = new Map<string, SelectionPin>();
+      for (const place of allSelections) {
+        if (place && place.id) {
+          uniquePlacesMap.set(String(place.id), place);
+        }
+      }
+      const uniquePlaces = Array.from(uniquePlacesMap.values());
+      
+      if (uniquePlaces.length === 0) {
+          setError("No places were selected by the group.");
+          setPlaces([]);
+          return;
+      }
+
+      // 3. Fetch detailed GMap data for each unique place
+      const BACKEND_BASE = (process.env.NEXT_PUBLIC_BACKEND_URL ?? "").replace(/\/$/, "");
+
+      const gmapApiFetches = uniquePlaces.map(async (place) => { // Make async
+        const params = new URLSearchParams({
+          name: place.name || "Location", // GMap API needs a name
+          lat: place.lat.toString(),
+          lng: place.lon.toString(),
+          radius: "50" // Small radius since we have exact coords
+        });
+        const url = `${BACKEND_BASE}/api/gmap/search?${params.toString()}`;
+        
+        try {
+          const res = await fetch(url);
+          if (res.ok) {
+            const gmapData = await res.json();
+            // *** FIX ***: Merge GMap data ONTO the original place
+            // This ensures we keep 'place.id' as a fallback
+            return { ...place, ...gmapData };
+          }
+          // GMap search failed, return basic info, ensuring 'element_id' is set
+          console.warn(`GMap search failed for ${place.name} (status: ${res.status})`);
+          return { ...place, element_id: place.id, reviews: [], rating: null };
+        } catch (e) {
+          console.error(`Failed to fetch GMap data for ${place.name}:`, e);
+          // On fetch error, also return basic info
+          return { ...place, element_id: place.id, reviews: [], rating: null };
+        }
+      });
+
+      const gmapResults = await Promise.all(gmapApiFetches);
+
+      // 4. Format and set state
+      const formattedPlaces: Place[] = gmapResults.map((p: any) => ({
+        // *** FIX ***: Prioritize gmap's element_id, but ALWAYS fall back to p.id
+        // (which is the original SelectionPin 'id')
+        element_id: String(p.element_id ?? p.id), 
+        name: p.name ?? "Unknown Location",
+        rating: p.rating,
+        reviews: p.reviews || [],
+        lat: p.lat,
+        lon: p.lon,
+      }));
+  
+      setPlaces(formattedPlaces);
+      setError(null);
+    } catch (err: any) {
+      console.error("Error fetching listings:", err);
+      setError(err.message || "Failed to load listings.");
+    }
+  }, []); // Empty dependency array, it's a stable function
+
+  // --- UPDATED: Main useEffect to run all fetches ---
   useEffect(() => {
     (async () => {
       const { data: s } = await supabase.auth.getSession();
@@ -194,10 +198,17 @@ export default function ListingsPage() {
         return;
       }
       setUserId(u.id);
-      await Promise.all([refreshParticipants(), refreshVotes()]);
+      
+      setLoading(true);
+      setError(null);
+      await Promise.all([
+        refreshParticipants(), 
+        refreshVotes(),
+        fetchListings(code) // 'code' is from useParams, stable here
+      ]);
+      setLoading(false);
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [code, router]);
+  }, [code, router, refreshParticipants, refreshVotes, fetchListings]);
 
   // Realtime sync for participants and votes
   useEffect(() => {
@@ -250,7 +261,8 @@ export default function ListingsPage() {
     setVotes((prev) => [...prev, { user_id: userId, place_id }]);
   };
 
-  if (!userId || participants.length === 0) {
+  // --- UPDATED: Loading and Error States ---
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <script src="https://cdn.tailwindcss.com"></script>
@@ -261,6 +273,28 @@ export default function ListingsPage() {
           </svg>
           <p className="text-gray-700 font-medium">Loading listings...</p>
         </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+         <script src="https://cdn.tailwindcss.com"></script>
+         <div className="text-center p-6 bg-white rounded-xl shadow-xl">
+           <p className="text-red-600 font-medium">Error: {error}</p>
+         </div>
+      </div>
+    );
+  }
+  
+  if (places.length === 0) {
+     return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+         <script src="https://cdn.tailwindcss.com"></script>
+         <div className="text-center p-6 bg-white rounded-xl shadow-xl">
+            <p className="text-gray-700 font-medium">No places found for this session.</p>
+         </div>
       </div>
     );
   }
@@ -287,9 +321,10 @@ export default function ListingsPage() {
       <main className="container mx-auto p-4 sm:p-6 lg:p-8 flex-grow">
         <div className="space-y-4">
           {places.map((place) => {
-            const pid = String(place.element_id);
+            const pid = String(place.element_id); // This line is now safe
             const isOpen = !!expanded[pid];
             const votesForPlace = voteCounts.get(pid) ?? 0;
+            const hasReviews = place.reviews && place.reviews.length > 0;
 
             return (
               <div key={pid} className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
@@ -299,22 +334,26 @@ export default function ListingsPage() {
                     <div className="flex items-center justify-between gap-3">
                       <h2 className="text-lg sm:text-xl font-bold text-gray-900 truncate">{place.name}</h2>
                       <div className="shrink-0 text-sm sm:text-base text-gray-700">
-                        Rating: <span className="font-semibold">{place.rating ?? "-"}</span>
+                        Rating: <span className="font-semibold">{place.rating ?? "N/A"}</span>
                       </div>
                     </div>
 
                     {/* Reviews toggle */}
-                    <button
-                      type="button"
-                      onClick={() => setExpanded((e) => ({ ...e, [pid]: !e[pid] }))}
-                      className="mt-1 text-xs sm:text-sm text-blue-600 hover:text-blue-700 inline-flex items-center gap-2"
-                    >
-                      <Arrow dir={isOpen ? "down" : "right"} />
-                      <span>Read Some Reviews</span>
-                    </button>
+                    {hasReviews ? (
+                      <button
+                        type="button"
+                        onClick={() => setExpanded((e) => ({ ...e, [pid]: !e[pid] }))}
+                        className="mt-1 text-xs sm:text-sm text-blue-600 hover:text-blue-700 inline-flex items-center gap-2"
+                      >
+                        <Arrow dir={isOpen ? "down" : "right"} />
+                        <span>Read Reviews</span>
+                      </button>
+                    ) : (
+                       <p className="mt-1 text-xs sm:text-sm text-gray-500">No reviews available</p>
+                    )}
 
                     {/* Reviews section */}
-                    {isOpen && (
+                    {isOpen && hasReviews && (
                       <div className="mt-3 space-y-3">
                         {(place.reviews ?? []).slice(0, 2).map((r, idx) => (
                           <div key={idx} className="border border-gray-100 rounded-lg p-3 bg-gray-50">
