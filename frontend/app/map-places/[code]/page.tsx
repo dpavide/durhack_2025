@@ -285,7 +285,7 @@ export default function MapPlacesPage() { // Renamed component for clarity
     if (allReady && sessionId) {
       setTimeout(() => {
         // FIX: Redirect to vote page using search param as it expects
-        router.push(`/vote?session=${sessionId}`);
+        router.push(`/listings/${sessionId}`);
       }, 1500);
     }
   }, [allReady, sessionId, router]);
