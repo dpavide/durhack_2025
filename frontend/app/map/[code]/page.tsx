@@ -99,6 +99,9 @@ export default function MapPage() {
   const [isSending, setIsSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [sendSuccess, setSendSuccess] = useState<boolean>(false);
+  
+  // NEW: State for merged intentions text
+  const [allIntentionsText, setAllIntentionsText] = useState<string | null>(null); 
 
   // Debounced Supabase save (master only)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -195,6 +198,7 @@ export default function MapPage() {
       }
       setSendSuccess(false);
       setSendError(null);
+      setAllIntentionsText(null); // Clear intentions when map changes
     })();
   }, [polygon]);
 
@@ -229,6 +233,39 @@ export default function MapPage() {
       await supabase.from("rooms").update({ polygon_geojson: feature }).eq("room_code", code).eq("master_id", userId);
     }, 400);
   };
+  
+  // NEW: Function to fetch and merge all intentions
+  const fetchAndDisplayIntentions = async () => {
+    setAllIntentionsText("Fetching intentions...");
+    
+    // Query the planning_intentions table for the current room
+    const { data: intentionsData, error } = await supabase
+      .from("planning_intentions")
+      .select("task_description, user_id, profiles:profiles!planning_intentions_user_id_fkey(username)")
+      .eq("room_code", code);
+      
+    if (error) {
+      console.error("Error fetching intentions:", error);
+      setAllIntentionsText("Error fetching intentions. Check console for details.");
+      return;
+    }
+    
+    if (!intentionsData || intentionsData.length === 0) {
+      setAllIntentionsText("No planning intentions were submitted for this session.");
+      return;
+    }
+
+    // Format the data as "Username: Task Description" and join with newlines
+    const mergedText = intentionsData
+      .map((item: any) => {
+        const username = item.profiles?.username ?? `User ${item.user_id.substring(0, 5)}`;
+        return `${username}: ${item.task_description}`;
+      })
+      .join('\n');
+      
+    setAllIntentionsText(mergedText);
+  };
+
 
   // Handle create/edit/delete (master only)
   const handleCreated = async (e: any) => {
@@ -304,6 +341,7 @@ export default function MapPage() {
     lastLayerRef.current = null;
     setSendSuccess(false);
     setSendError(null);
+    setAllIntentionsText(null);
   };
 
   // Intercept the Leaflet Draw "delete" (bin/trash) to behave like clear (master only)
@@ -348,8 +386,10 @@ export default function MapPage() {
     setIsSending(true);
     setSendError(null);
     setSendSuccess(false);
+    setAllIntentionsText(null);
 
     try {
+      // 1. Send Polygon to Backend API (Existing Logic)
       const payload = buildPayloadForServer();
       const url = BACKEND_BASE !== "" ? `${BACKEND_BASE}/api/map/set_sample` : "/api/map/set_sample";
 
@@ -367,8 +407,13 @@ export default function MapPage() {
       }
 
       await resp.json();
-      setIsSending(false);
       setSendSuccess(true);
+      
+      // 2. NEW: Fetch and display intentions
+      await fetchAndDisplayIntentions();
+      
+      setIsSending(false);
+
     } catch (err: any) {
       setIsSending(false);
       setSendError(String(err));
@@ -483,6 +528,18 @@ export default function MapPage() {
             {sendError && (
               <div className="text-sm text-red-700 dark:text-red-300">
                 Error saving polygon: {sendError}
+              </div>
+            )}
+
+            {/* Merged Intentions Text */}
+            {allIntentionsText !== null && (
+              <div className="mt-4">
+                <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">
+                    Session Planning Intentions
+                </h3>
+                <pre className="p-4 bg-white dark:bg-zinc-900 border border-black/[.08] dark:border-white/[.145] rounded-lg text-sm whitespace-pre-wrap text-zinc-900 dark:text-zinc-100">
+                    {allIntentionsText}
+                </pre>
               </div>
             )}
 
