@@ -22,11 +22,11 @@ const Checkmark = (props: any) => (
 type Place = {
   element_id: number | string;
   name: string;
-  rating?: number | null;
+  rating?: number;
   reviews?: {
-    author_name?: string;
+    author_name: string;
     author_url?: string;
-    rating?: number | null;
+    rating?: number;
     relative_time_description?: string;
     text?: string;
   }[];
@@ -58,16 +58,15 @@ export default function ListingsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  // Gemini / AI UI state
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError] = useState<string | null>(null);
-  const [aiChosenIndex, setAiChosenIndex] = useState<number | null>(null); // index (0-based) chosen by AI
-  const [aiResponseText, setAiResponseText] = useState<string | null>(null);
-  const [aiSavedFilename, setAiSavedFilename] = useState<string | null>(null);
-
-  // --- NEW: Track the user's current vote ID ---
   // State for animation control
   const [showWinnerAnimation, setShowWinnerAnimation] = useState(false);
+
+  // --- GEMINI / AI STATE ---
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiChosenIndex, setAiChosenIndex] = useState<number | null>(null);
+  const [aiResponseText, setAiResponseText] = useState<string | null>(null);
+  const [aiSavedFilename, setAiSavedFilename] = useState<string | null>(null);
 
   const userVoteId = useMemo(() => {
     if (!userId) return null;
@@ -134,44 +133,6 @@ export default function ListingsPage() {
     if (!roomCode) return;
     setLoading(true);
     try {
-      // 1. Fetch all selections for the room
-      const { data: selectionsData, error: selectionsError } = await supabase
-        .from("player_selections")
-        .select("selections")
-        .eq("session_id", roomCode);
-
-      if (selectionsError) throw new Error(`Supabase error: ${selectionsError.message}`);
-      if (!selectionsData || selectionsData.length === 0) {
-        throw new Error("No player selections found for this session.");
-      }
-
-      // 2. Process and de-duplicate
-      const allSelections: SelectionPin[] = selectionsData.flatMap((row: any) => row.selections || []);
-      const uniquePlacesMap = new Map<string, SelectionPin>();
-      for (const place of allSelections) {
-        if (place && place.id) {
-          uniquePlacesMap.set(String(place.id), place);
-        }
-      }
-      const uniquePlaces = Array.from(uniquePlacesMap.values());
-      
-      if (uniquePlaces.length === 0) {
-          setError("No places were selected by the group.");
-          setPlaces([]);
-          return;
-      }
-
-      // 3. Fetch detailed GMap data for each unique place (omitted implementation for brevity, logic remains the same)
-      const BACKEND_BASE = (process.env.NEXT_PUBLIC_BACKEND_URL ?? "").replace(/\/$/, "");
-
-      const gmapApiFetches = uniquePlaces.map(async (place) => { 
-        const params = new URLSearchParams({
-          name: place.name || "Location", 
-          lat: String(place.lat ?? 0),
-          lng: String(place.lon ?? 0),
-          radius: "50"
-        });
-        const url = `${BACKEND_BASE}/api/gmap/search?${params.toString()}`;
         const { data: selectionsData } = await supabase.from("player_selections").select("selections").eq("session_id", roomCode);
         const allSelections: SelectionPin[] = (selectionsData || []).flatMap((row: any) => row.selections || []);
         
@@ -280,7 +241,6 @@ export default function ListingsPage() {
       return () => clearTimeout(timer);
     }
     // If the winningPlaceId is null, but the animation was previously shown, reset the state.
-    // This handles the case where the winner unvotes, but generally shouldn't happen here.
     if (!winningPlaceId && showWinnerAnimation) {
          setShowWinnerAnimation(false);
     }
@@ -305,9 +265,165 @@ export default function ListingsPage() {
     await refreshVotes();
   };
 
+  // -----------------------
+  // ASK GEMINI IMPLEMENTATION (merged from the original working file)
+  // -----------------------
+  const BACKEND_BASE = (process.env.NEXT_PUBLIC_BACKEND_URL ?? "").replace(/\/$/, "");
+
+  const buildSystemPromptForPlaces = (placesToSend: Place[]) => {
+    const jsonFromListings = placesToSend.map((p) => ({
+      element_id: p.element_id,
+      name: p.name,
+      rating: p.rating ?? null,
+      reviews: (p.reviews ?? []).map((r) => ({
+        rating: r.rating ?? null,
+        text: r.text ?? "",
+        author_name: r.author_name ?? "",
+      })),
+    }));
+
+    const roleAndInstructions = `
+**Role:** You are a decisive dining and activity advisor. Your task is to analyze a list of places and recommend exactly ONE option.
+
+**Input:** You will receive a JSON array of places in f-string format. Each place has:
+- \`element_id\`: unique identifier
+- \`name\`: place name
+- \`rating\`: numerical rating (higher is better)
+- \`reviews\`: array of review objects with \`rating\`, \`text\`, and \`author_name\`
+
+**Decision Process:**
+1. **Primary Focus:** Analyze ratings and review content as the most important factors
+2. **Rating Priority:** Favor places with higher overall ratings (4.0+ is good, 4.5+ is excellent)
+3. **Review Analysis:** Look for consistent positive themes in review texts (food quality, service, ambiance, value)
+4. **Review Volume:** Consider places with more substantive, detailed reviews as more reliable
+5. **Tie-breaking:** If ratings are similar, choose based on more enthusiastic or consistent positive reviews
+
+**Output Format:** Respond ONLY with this exact JSON structure:
+\`\`\`json
+{"index_chosen": number, "response": "string"}
+\`\`\`
+`;
+    return `${JSON.stringify(jsonFromListings)}\n${roleAndInstructions}`;
+  };
+
+  const tryExtractJson = (raw: string): string | null => {
+    try {
+      JSON.parse(raw);
+      return raw;
+    } catch {
+      const firstBrace = raw.indexOf("{");
+      const firstBracket = raw.indexOf("[");
+      let start = -1;
+      if (firstBracket !== -1 && (firstBracket < firstBrace || firstBrace === -1)) {
+        start = firstBracket;
+        const lastBracket = raw.lastIndexOf("]");
+        if (lastBracket !== -1) {
+          const candidate = raw.slice(start, lastBracket + 1);
+          try {
+            JSON.parse(candidate);
+            return candidate;
+          } catch {}
+        }
+      } else if (firstBrace !== -1) {
+        start = firstBrace;
+        const lastBrace = raw.lastIndexOf("}");
+        if (lastBrace !== -1) {
+          const candidate = raw.slice(start, lastBrace + 1);
+          try {
+            JSON.parse(candidate);
+            return candidate;
+          } catch {}
+        }
+      }
+      return null;
+    }
+  };
+
+  const downloadPythonFile = (obj: any, filename = "gemini_result.py") => {
+    let json = JSON.stringify(obj, null, 2);
+    json = json.replace(/\bnull\b/g, "None").replace(/\btrue\b/g, "True").replace(/\bfalse\b/g, "False");
+    const pythonContents = `# Auto-generated by Ask Gemini\nresult = ${json}\n`;
+    const blob = new Blob([pythonContents], { type: "text/x-python" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    setAiSavedFilename(filename);
+  };
+
+  const handleAskGemini = async () => {
+    if (places.length === 0) return;
+    setAiLoading(true);
+    setAiError(null);
+    setAiChosenIndex(null);
+    setAiResponseText(null);
+    setAiSavedFilename(null);
+
+    try {
+      const systemPrompt = buildSystemPromptForPlaces(places);
+
+      const setPromptUrl = BACKEND_BASE !== "" ? `${BACKEND_BASE}/api/gemini/set_prompt` : "/api/gemini/set_prompt";
+
+      const setResp = await fetch(setPromptUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: "", system_prompt: systemPrompt }),
+      });
+
+      if (!setResp.ok) {
+        const txt = await setResp.text().catch(() => "");
+        throw new Error(`Failed to call Gemini set_prompt: ${setResp.status} ${txt}`);
+      }
+
+      const getResponseUrl = BACKEND_BASE !== "" ? `${BACKEND_BASE}/api/gemini/get_response` : "/api/gemini/get_response";
+      let getResp = await fetch(getResponseUrl);
+      let resultJson = await getResp.json().catch(() => ({ response: null }));
+      if (!resultJson || !resultJson.response) {
+        const genUrl = BACKEND_BASE !== "" ? `${BACKEND_BASE}/api/gemini/generate` : "/api/gemini/generate";
+        await fetch(genUrl, { method: "POST" });
+        await new Promise((r) => setTimeout(r, 500));
+        getResp = await fetch(getResponseUrl);
+        resultJson = await getResp.json().catch(() => ({ response: null }));
+      }
+
+      const rawResponse: string = (resultJson && resultJson.response) ? String(resultJson.response).trim() : "";
+      if (!rawResponse) throw new Error("Empty response from Gemini.");
+
+      let parsed: any = null;
+      try {
+        parsed = JSON.parse(rawResponse);
+      } catch {
+        const extracted = tryExtractJson(rawResponse);
+        if (!extracted) {
+          throw new Error("Gemini response did not contain valid JSON.");
+        }
+        parsed = JSON.parse(extracted);
+      }
+
+      if (!parsed || typeof parsed !== "object" || typeof parsed.index_chosen !== "number" || typeof parsed.response !== "string") {
+        throw new Error("Parsed Gemini response was not in the expected shape {index_chosen: number, response: string}");
+      }
+
+      const chosenIndex = parsed.index_chosen;
+      setAiChosenIndex(chosenIndex);
+      setAiResponseText(parsed.response);
+
+      downloadPythonFile(parsed, `gemini_result_${Date.now()}.py`);
+
+      setAiLoading(false);
+    } catch (err: any) {
+      console.error("Ask Gemini error:", err);
+      setAiError(err?.message || String(err));
+      setAiLoading(false);
+    }
+  };
+
   // --- RENDER LOGIC ---
   if (loading) {
-    // ... Loading state remains the same
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <script src="https://cdn.tailwindcss.com"></script>
@@ -323,7 +439,6 @@ export default function ListingsPage() {
   }
 
   if (error || places.length === 0) {
-    // ... Error state remains the same
     const message = error || "No places found for this session.";
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -380,17 +495,16 @@ export default function ListingsPage() {
         <>
           {/* Confetti container (Fixed position, high z-index) */}
           <div className="fixed inset-0 z-40 pointer-events-none">
-            {/* Increased Confetti Count to 150 */}
             {Array.from({ length: 150 }).map((_, i) => (
               <div 
                 key={i} 
                 className="confetti-piece rounded-full"
                 style={{
                   left: `${Math.random() * 100}vw`,
-                  width: `${5 + Math.random() * 8}px`, /* Random size */
+                  width: `${5 + Math.random() * 8}px`,
                   height: `${5 + Math.random() * 8}px`,
                   backgroundColor: `hsl(${Math.random() * 360}, 100%, 50%)`,
-                  animationDelay: `${Math.random() * 0.7}s`, /* Stagger the start */
+                  animationDelay: `${Math.random() * 0.7}s`,
                   animationDuration: `${2 + Math.random()}s`,
                 }}
               />
@@ -422,8 +536,25 @@ export default function ListingsPage() {
             <h1 className="text-xl font-bold text-gray-800">
               Vote for a Place in <span className="text-blue-600">{code}</span>
             </h1>
-            <div className="text-sm text-gray-600">
-              Total Voters: <span className="font-semibold text-gray-800">{participants.length}</span>
+            <div className="text-sm text-gray-600 flex items-center gap-4">
+              <div>
+                Total Voters: <span className="font-semibold text-gray-800">{participants.length}</span>
+              </div>
+              {/* AI status summary in header */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleAskGemini}
+                  disabled={aiLoading}
+                  className={`px-3 py-1 rounded-full text-white text-sm font-semibold shadow ${aiLoading ? "bg-purple-300 cursor-not-allowed" : "bg-purple-600 hover:bg-purple-700"}`}
+                  title="Ask Gemini to pick the best place from the list"
+                >
+                  {aiLoading ? "Thinking..." : "Ask Gemini"}
+                </button>
+                {aiLoading && <div className="text-xs text-gray-600">AI analyzing…</div>}
+                {aiError && <div className="text-xs text-red-600">{aiError}</div>}
+                {aiResponseText && <div className="text-xs text-gray-700">AI suggestion ready — saved as <span className="font-medium">{aiSavedFilename ?? "gemini_result.py"}</span></div>}
+              </div>
             </div>
           </div>
         </header>
@@ -433,7 +564,7 @@ export default function ListingsPage() {
               Click a **Vote** button to select your choice. Click it again to **cancel** your vote.
           </p>
           <div className="space-y-4">
-            {places.map((place) => {
+            {places.map((place, idx) => {
               const pid = String(place.element_id);
               const isOpen = !!expanded[pid];
               const votesForPlace = voteCounts.get(pid) ?? 0;
@@ -455,7 +586,7 @@ export default function ListingsPage() {
                   buttonClass = "bg-gray-400 hover:bg-gray-500"; 
               }
 
-            const isAiChosenHere = aiChosenIndex === idx;
+              const isAiChosenHere = aiChosenIndex === idx;
 
               return (
                 <div key={pid} className={`bg-white border-2 rounded-xl shadow-lg p-4 sm:p-5 transition-all duration-300 
@@ -504,8 +635,8 @@ export default function ListingsPage() {
                       {/* Reviews section (omitted detail) */}
                       {isOpen && hasReviews && (
                         <div className="mt-3 space-y-3">
-                          {(place.reviews ?? []).slice(0, 2).map((r, idx) => (
-                            <div key={idx} className="border border-gray-100 rounded-lg p-3 bg-gray-50">
+                          {(place.reviews ?? []).slice(0, 2).map((r, idx2) => (
+                            <div key={idx2} className="border border-gray-100 rounded-lg p-3 bg-gray-50">
                               <div className="flex items-center justify-between text-xs text-gray-600">
                                 <div className="truncate">
                                   <span className="font-semibold">{r.author_name}</span>
@@ -522,6 +653,17 @@ export default function ListingsPage() {
 
                     {/* Vote button & count */}
                     <div className="shrink-0 flex flex-col items-center">
+                      {/* AI badge: shown if this index was selected by AI */}
+                      {isAiChosenHere && aiResponseText && (
+                        <div className="ai-container mb-1">
+                          <div className="ai-badge" aria-hidden>💬</div>
+                          <div className="ai-bubble">
+                            <div className="font-semibold text-sm mb-1">Gemini recommends:</div>
+                            <div className="text-sm whitespace-pre-wrap">{aiResponseText}</div>
+                          </div>
+                        </div>
+                      )}
+
                       <button
                         type="button"
                         disabled={isUnanimousWinner || showWinnerAnimation} 
@@ -544,12 +686,73 @@ export default function ListingsPage() {
           </div>
         </main>
 
+        {/* Dummy "Ask Gemini" button kept for quick access on mobile */}
+        <button
+          type="button"
+          onClick={handleAskGemini}
+          disabled={aiLoading}
+          className="fixed bottom-4 right-4 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-full shadow-lg text-sm font-semibold"
+        >
+          {aiLoading ? 'Thinking...' : 'Ask Gemini'}
+        </button>
+      </div>
+
       {/* Floating status */}
       <div className="fixed bottom-4 left-4">
         {aiError && <div className="bg-red-100 text-red-700 px-3 py-2 rounded-md shadow">{aiError}</div>}
       </div>
 
-      {/* Note: the Ask Gemini main button is above in the page */}
+      {/* AI bubble styles (kept from original) */}
+      <style>{`
+        .ai-badge {
+          width: 28px;
+          height: 28px;
+          border-radius: 999px;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          font-size:14px;
+          color:white;
+          background:#6b21a8;
+          box-shadow:0 2px 6px rgba(0,0,0,0.12);
+        }
+        .ai-container {
+          position: relative;
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .ai-bubble {
+          position: absolute;
+          right: 36px;
+          top: -6px;
+          min-width: 180px;
+          max-width: 320px;
+          background: white;
+          border: 1px solid rgba(0,0,0,0.06);
+          padding: 8px 10px;
+          border-radius: 8px;
+          box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+          font-size: 13px;
+          color:#111827;
+          display: none;
+          z-index: 40;
+        }
+        .ai-container:hover .ai-bubble {
+          display: block;
+        }
+        .ai-bubble::after {
+          content: "";
+          position: absolute;
+          right: -6px;
+          top: 12px;
+          width: 0;
+          height: 0;
+          border-left: 6px solid rgba(0,0,0,0.06);
+          border-top: 6px solid transparent;
+          border-bottom: 6px solid transparent;
+        }
+      `}</style>
     </div>
   );
 }
