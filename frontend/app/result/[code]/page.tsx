@@ -11,7 +11,7 @@ import { LatLngExpression } from "leaflet"; // Import type only
 
 /* ---------------------------
    Types
----------------------------- */
+--------------------------- */
 type PlaceDetail = {
   element_id: string;
   name: string;
@@ -251,7 +251,7 @@ function RouteDrawer({ start, end }: { start: LatLngExpression | null, end: LatL
 
 /* ---------------------------
    Main Component
----------------------------- */
+--------------------------- */
 export default function ResultPage() {
   const router = useRouter();
   const params = useParams<{ code: string }>();
@@ -460,12 +460,21 @@ export default function ResultPage() {
         <p>Planning complete. Time to meet up!</p>
 
         {/* ✅ MAIN MENU BUTTON ADDED HERE */}
-        <div className="mt-4 flex justify-center">
+        <div className="mt-4 flex justify-center items-center gap-3">
           <button
             onClick={() => router.push("/home")}
             className="px-6 py-3 bg-emerald-600 text-white font-semibold rounded-xl shadow-lg hover:bg-emerald-700 transition duration-200"
           >
-          Main Menu
+            Main Menu
+          </button>
+
+          {/* New Thank you button placed to the right of Main Menu */}
+          <button
+            onClick={() => router.push("/thank-you")}
+            className="px-6 py-3 bg-indigo-600 text-white font-semibold rounded-xl shadow-lg hover:bg-indigo-700 transition duration-200"
+            aria-label="Go to thank you page"
+          >
+            Thank you
           </button>
         </div>
       </footer>
