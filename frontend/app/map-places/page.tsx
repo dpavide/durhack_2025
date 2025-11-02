@@ -138,13 +138,28 @@ export default function MapPage() {
      Supabase: submit selections + wait for all
   ---------------------------- */
   const handleContinue = async () => {
-    if (!sessionId || !userId) return alert("Missing session or user");
+    if (!sessionId || !userId) {
+      // Use console.warn instead of alert
+      console.warn("Missing session or user");
+      return;
+    }
+
+    // --- FIX IMPLEMENTED HERE ---
+    // 1. Find the full pin objects from the 'pins' state array
+    const selectedPinObjects = pins.filter((p) => selectedPins.includes(p.id));
+
+    // 2. Check if we found all of them (sanity check)
+    if (selectedPinObjects.length !== selectedPins.length) {
+      console.error("Data mismatch: Could not find all selected pin objects in state.");
+      return;
+    }
+    // --- END OF FIX ---
 
     await supabase.from("player_selections").upsert(
       {
         session_id: sessionId,
         player_id: userId,
-        selections: selectedPins,
+        selections: selectedPinObjects, // 3. Save the array of objects, not the array of IDs
         ready: true,
       },
       { onConflict: "session_id,player_id" }
@@ -185,7 +200,7 @@ export default function MapPage() {
         router.push(`/vote?session=${sessionId}`);
       }, 1500);
     }
-  }, [allReady]);
+  }, [allReady, sessionId, router]); // Added router to dependency array
 
   /* ---------------------------
      Load + save user pins
@@ -205,6 +220,7 @@ export default function MapPage() {
   }, [pins]);
 
   const addPin = (lat: number, lng: number) => {
+    // Use a custom modal/prompt in a real app, window.prompt is blocking
     const name = window.prompt("Name (optional)") || undefined;
     const website = window.prompt("Website (optional)") || undefined;
     setPins((prev) => [
@@ -214,7 +230,8 @@ export default function MapPage() {
   };
 
   const clearUserPins = () => {
-    if (confirm("Clear user pins?")) {
+    // Use a custom modal/confirm in a real app
+    if (window.confirm("Clear user pins?")) {
       const keepJson = pins.filter((p) => p.source === "json");
       setPins(keepJson);
       localStorage.removeItem(LS_KEY);
@@ -347,3 +364,4 @@ export default function MapPage() {
     </div>
   );
 }
+
