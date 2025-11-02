@@ -26,7 +26,7 @@ export default function HowItWorksPage() {
     {
       title: "4) Let the AI suggest options",
       body:
-        "We find fair meet-in-the-middle options, score them by travel time balance, opening hours, live weather, and your preferences.",
+        "We find fair meet-in-the-middle options, score them by travel-time balance, opening hours, live weather, and your preferences.",
     },
     {
       title: "5) Vote or auto-choose",
@@ -42,7 +42,7 @@ export default function HowItWorksPage() {
 
   return (
     <main className="min-h-screen bg-zinc-50 text-zinc-900">
-      {/* Hero */}
+      {/* Hero (no buttons) */}
       <section className="mx-auto max-w-5xl px-6 pt-16 pb-8">
         <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">
           Plan your next meetup — in minutes.
@@ -52,21 +52,6 @@ export default function HowItWorksPage() {
           <span className="font-medium"> when</span>, and <span className="font-medium">what to do</span>,
           balancing travel time fairly and explaining every recommendation.
         </p>
-
-        <div className="mt-6 flex flex-wrap gap-3">
-          <Link
-            href="/map"
-            className="rounded-full bg-indigo-600 text-white px-5 py-3 text-sm font-medium hover:bg-indigo-700 transition"
-          >
-            Try the Map
-          </Link>
-          <Link
-            href="/user-info"
-            className="rounded-full border border-zinc-300 bg-white px-5 py-3 text-sm font-medium hover:bg-zinc-100 transition"
-          >
-            Add Your Details
-          </Link>
-        </div>
       </section>
 
       {/* Steps */}
@@ -83,18 +68,18 @@ export default function HowItWorksPage() {
           ))}
         </div>
 
-        {/* Little extras */}
+        {/* Extras */}
         <div className="mt-8 grid sm:grid-cols-3 gap-5">
           <div className="rounded-2xl bg-white shadow-sm border border-zinc-200 p-5">
             <h4 className="font-semibold">Fairness meter</h4>
             <p className="mt-2 text-zinc-600">
-              We minimize the longest travel time so nobody gets the short end of the stick.
+              We minimize the longest travel time so nobody gets the short end.
             </p>
           </div>
           <div className="rounded-2xl bg-white shadow-sm border border-zinc-200 p-5">
             <h4 className="font-semibold">Explainable AI</h4>
             <p className="mt-2 text-zinc-600">
-              Every suggestion includes a short reason (preferences, opening hours, weather, etc.).
+              Every suggestion includes a brief reason (preferences, hours, weather, etc.).
             </p>
           </div>
           <div className="rounded-2xl bg-white shadow-sm border border-zinc-200 p-5">
@@ -106,29 +91,10 @@ export default function HowItWorksPage() {
         </div>
       </section>
 
-      {/* CTA footer */}
+      {/* Simple footer note (no CTAs) */}
       <section className="mx-auto max-w-5xl px-6 pb-16">
-        <div className="rounded-2xl border border-zinc-200 bg-white p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h3 className="text-lg font-semibold">Ready to plan?</h3>
-            <p className="text-zinc-600">
-              Jump to the map to drop pins or import suggestions from our AI.
-            </p>
-          </div>
-          <div className="flex gap-3">
-            <Link
-              href="/map"
-              className="rounded-full bg-emerald-600 text-white px-5 py-3 text-sm font-medium hover:bg-emerald-700 transition"
-            >
-              Open the Map
-            </Link>
-            <Link
-              href="/how-it-works"
-              className="rounded-full border border-zinc-300 bg-white px-5 py-3 text-sm font-medium hover:bg-zinc-100 transition"
-            >
-              Read again
-            </Link>
-          </div>
+        <div className="rounded-2xl border border-zinc-200 bg-white p-6 text-sm text-zinc-600">
+          Built ethically with AI • Fairness • Privacy • Explainability
         </div>
       </section>
     </main>
