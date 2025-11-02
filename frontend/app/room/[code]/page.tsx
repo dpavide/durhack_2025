@@ -4,8 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 
-export const dynamic = 'force-dynamic';
-
 // --- ICON COMPONENTS (Using simple SVG placeholders for demonstration) ---
 // Note: Only UserIcon and Crown are used in this waiting room mode.
 const UserIcon = (props: any) => (
