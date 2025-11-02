@@ -47,28 +47,7 @@ function UserMenu({ email }: { email: string }) {
         </span>
       </button>
 
-      {open && (
-        <div className="absolute right-0 z-10 mt-2 w-56 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg">
-          <div className="py-1">
-            <Link
-              href="/user-info"
-              onClick={() => setOpen(false)}
-              className="block w-full px-4 py-2 text-left text-sm text-gray-700 transition hover:bg-gray-50"
-            >
-              User info
-            </Link>
-            <button
-              className="block w-full px-4 py-2 text-left text-sm text-gray-700 transition hover:bg-gray-50"
-              onClick={async () => {
-                await supabase.auth.signOut();
-                setOpen(false);
-              }}
-            >
-              Sign out
-            </button>
-          </div>
-        </div>
-      )}
+      
     </div>
   );
 }
