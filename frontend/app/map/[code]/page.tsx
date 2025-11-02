@@ -438,6 +438,8 @@ export default function MapPage() {
       }
       
       setIsSending(false);
+      
+      router.push('/map-places'); 
 
     } catch (err: any) {
       setIsSending(false);

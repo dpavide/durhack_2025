@@ -1,3 +1,5 @@
+// frontend/app/map-places/page.tsx
+
 "use client";
 
 import React from "react";
@@ -5,7 +7,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import "leaflet/dist/leaflet.css";
 import "leaflet-draw/dist/leaflet.draw.css";
-import L from "leaflet";
+
 import { useMapEvents } from "react-leaflet";
 import type { ComponentType } from "react";
 
@@ -44,7 +46,7 @@ const EditControl = (dynamic(
 ) as unknown) as ComponentType<any>;
 
 /* ---------------------------
-   Types
+   Types & Constants
 ---------------------------- */
 type Pin = {
   id: string;
@@ -57,6 +59,7 @@ type Pin = {
 };
 
 const LS_KEY = "map_pins_v1";
+const BACKEND_BASE = (process.env.NEXT_PUBLIC_BACKEND_URL ?? "").replace(/\/$/, "");
 
 /* ---------------------------
    Listen to map clicks (for user pins)
@@ -255,18 +258,23 @@ export default function MapPage() {
   const [pinMode, setPinMode] = useState(false);
   const [pins, setPins] = useState<Pin[]>([]);
 
-  const markerIcon = useMemo(
-    () =>
+  // Removed state variables for screen display: geminiResponse, isLoadingGemini, geminiError
+
+  const [markerIcon, setMarkerIcon] = useState<L.Icon | null>(null);
+
+  useEffect(() => {
+    // We can safely import and access L here because useEffect only runs on the client.
+    const L = require("leaflet"); 
+    setMarkerIcon(
       new L.Icon({
         iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-        shadowUrl:
-          "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+        shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
         iconSize: [25, 41],
         iconAnchor: [12, 41],
         popupAnchor: [0, -36],
-      }),
-    []
-  );
+      })
+    );
+  }, []);
 
   // 1) On first mount, load hardcoded JSON markers
   useEffect(() => {
@@ -295,6 +303,55 @@ export default function MapPage() {
     const onlyUser = pins.filter((p) => p.source === "user");
     localStorage.setItem(LS_KEY, JSON.stringify(onlyUser));
   }, [pins]);
+
+  // 🚀 DEBUGGING useEffect: Fetch Gemini Response and PRINT ALL
+  useEffect(() => {
+    const fetchResponse = async () => {
+      const endpoint = "/api/gemini/get_response";
+      const url = BACKEND_BASE !== "" ? `${BACKEND_BASE}${endpoint}` : endpoint;
+
+      console.log("--- DEBUG: Starting Gemini Fetch ---");
+      console.log(`Attempting to fetch from URL: ${url}`);
+      
+      try {
+        const resp = await fetch(url);
+        const text = await resp.text();
+
+        if (!resp.ok) {
+          console.error(`ERROR: HTTP Status ${resp.status} - Could not retrieve Gemini Plan.`);
+          console.error("RAW SERVER RESPONSE TEXT:", text);
+          return;
+        }
+
+        try {
+            const data = JSON.parse(text);
+
+            // The response is expected to be { "response": "..." }
+            if (data.response) {
+                console.log("--- GEMINI SESSION PLAN START (SUCCESS) ---");
+                console.log(data.response); // <<< Prints the plan to the console
+                console.log("--- GEMINI SESSION PLAN END ---");
+            } else {
+                console.warn("Gemini response endpoint returned successfully, but 'response' field was null or missing.");
+                console.log("Returned Data:", data);
+            }
+        } catch (jsonError) {
+            console.error("ERROR: Failed to parse JSON response from server.");
+            console.error("RAW SERVER RESPONSE TEXT:", text);
+        }
+        
+      } catch (error: any) {
+        // This catches network errors (e.g., DNS failure, CORS block, server not running)
+        console.error("FATAL ERROR: Failed to connect to backend (Network/CORS/Server down):", error.message);
+      } finally {
+         console.log("--- DEBUG: Gemini Fetch Attempt Complete ---");
+      }
+    };
+    
+    fetchResponse();
+  }, []); // Run only once on mount
+  // 🚀 END DEBUGGING useEffect
+
 
   const handleCreated = (e: any) => {
     const { layerType, layer } = e;
@@ -342,7 +399,7 @@ export default function MapPage() {
   return (
     <div className="min-h-screen bg-zinc-50">
       <div className="mx-auto max-w-6xl px-4 pt-8 pb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Select Area on Map</h1>
+        <h1 className="text-2xl font-semibold">Map Places (Gemini Plan in Console)</h1>
         <div className="flex gap-2">
           <button
             className={`px-4 py-2 rounded-full text-sm font-medium transition ${
