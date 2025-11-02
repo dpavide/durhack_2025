@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { type Session } from "@supabase/supabase-js";
 import { supabase } from "../../lib/supabaseClient";
 
-/* === Small inline icon — unchanged === */
+/* === Small inline icon unchanged === */
 function UserProfileIcon(props: any) {
   return (
     <svg
@@ -26,7 +26,7 @@ function UserProfileIcon(props: any) {
   );
 }
 
-/* === User menu — unchanged behaviour, restyled container === */
+/* === User menu - unchanged behaviour, restyled container === */
 function UserMenu({ email }: { email: string }) {
   const [open, setOpen] = useState(false);
   const displayEmail = email.includes("@")
