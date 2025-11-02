@@ -172,7 +172,7 @@ export default function Home() {
         <section className="mx-auto max-w-6xl px-6 pt-8 pb-14">
           <div className="max-w-4xl">
             <h1 className="text-[clamp(2.2rem,6vw,4.2rem)] font-extrabold leading-[1.05] tracking-tight text-slate-900">
-              Collaborative planning for your team
+              Start a meeting with anyone anywhere 
             </h1>
             <p className="mt-5 max-w-3xl text-xl text-slate-600">
               Powered by real-time data. Coordinate schedules, manage meetings,
