@@ -439,6 +439,8 @@ export default function MapPage() {
       
       setIsSending(false);
 
+      // 3. **NAVIGATE** to the map-places page. That page will call GET /api/map/search on mount and render the markers.
+      router.push("/map-places");
     } catch (err: any) {
       setIsSending(false);
       setSendError(String(err));
@@ -489,7 +491,7 @@ export default function MapPage() {
 
         <div className="w-full h-[70vh] rounded-lg border border-black/[.08] dark:border-white/[.145] shadow-md overflow-hidden">
           <MapContainer
-            center={[24.4539, 54.3773]}
+            center={[54.7761, -1.5754]}
             zoom={12}
             scrollWheelZoom={true}
             style={{ height: "100%", width: "100%" }}
@@ -536,9 +538,7 @@ export default function MapPage() {
             <button
               onClick={handleSendToBackend}
               disabled={polygon.length === 0 || !isValid || isSending}
-              className={`px-4 py-2 rounded-md font-medium shadow-sm text-white ${
-                polygon.length === 0 || !isValid || isSending ? "bg-zinc-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"
-              }`}
+              className={`px-4 py-2 rounded-md font-medium shadow-sm text-white ${polygon.length === 0 || !isValid || isSending ? "bg-zinc-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"}`}
             >
               {isSending ? "Sending..." : "Continue"}
             </button>
@@ -559,7 +559,7 @@ export default function MapPage() {
             {/* Merged Intentions Text */}
             {allIntentionsText !== null && (
               <div className="mt-4">
-                <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">
+                <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
                     Session Planning Intentions
                 </h3>
                 <pre className="p-4 bg-white dark:bg-zinc-900 border border-black/[.08] dark:border-white/[.145] rounded-lg text-sm whitespace-pre-wrap text-zinc-900 dark:text-zinc-100">
