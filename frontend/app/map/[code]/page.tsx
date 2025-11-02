@@ -57,6 +57,8 @@ function geoJSONToPositions(geo: any): LatLon[] {
 }
 
 // Compute area (km^2) using turf.area — dynamic import to avoid SSR issues
+// Cache the module so live-edit doesn't re-import on every vertex move.
+let turfAreaFn: ((feature: any) => number) | null = null;
 async function computeAreaKm2(latlngs: Array<{ lat: number; lon: number }>) {
   if (!latlngs || latlngs.length < 3) return 0;
   const coords = [latlngs.map((p) => [p.lon, p.lat])];
@@ -65,8 +67,12 @@ async function computeAreaKm2(latlngs: Array<{ lat: number; lon: number }>) {
   if (first[0] !== last[0] || first[1] !== last[1]) {
     coords[0].push(first);
   }
-  const areaModule: any = await import("@turf/area");
-  const areaMeters2: number = areaModule.default({
+  if (!turfAreaFn) {
+    const areaModule: any = await import("@turf/area");
+    turfAreaFn = areaModule.default || areaModule;
+  }
+  if (!turfAreaFn) return 0; // Guard against null
+  const areaMeters2: number = turfAreaFn({
     type: "Feature",
     geometry: { type: "Polygon", coordinates: coords },
     properties: {},
@@ -90,6 +96,7 @@ export default function MapPage() {
   const [polygon, setPolygon] = useState<LatLon[]>([]);
   const fgRef = useRef<any>(null);
   const lastLayerRef = useRef<any>(null);
+  const mapRef = useRef<any>(null); // live edit: keep map instance
 
   // Area + validation UI
   const [areaKm2, setAreaKm2] = useState<number | null>(null);
@@ -232,44 +239,103 @@ export default function MapPage() {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
       const feature = positionsToGeoJSON(positions);
-      await supabase.from("rooms").update({ polygon_geojson: feature }).eq("room_code", code).eq("master_id", userId);
+      await supabase
+        .from("rooms")
+        .update({ polygon_geojson: feature })
+        .eq("room_code", code)
+        .eq("master_id", userId);
     }, 400);
   };
-  
-  // NEW: Function to fetch and merge all intentions
-  // RETURNS the merged text (string) or null if none/error
+
+  // Fetch and merge all intentions for this room (used by Continue)
   const fetchAndDisplayIntentions = async (): Promise<string | null> => {
     setAllIntentionsText("Fetching intentions...");
-    
-    // Query the planning_intentions table for the current room
     const { data: intentionsData, error } = await supabase
       .from("planning_intentions")
       .select("task_description, user_id, profiles:profiles!planning_intentions_user_id_fkey(username)")
       .eq("room_code", code);
-      
+
     if (error) {
       console.error("Error fetching intentions:", error);
       setAllIntentionsText("Error fetching intentions. Check console for details.");
       return null;
     }
-    
     if (!intentionsData || intentionsData.length === 0) {
       setAllIntentionsText("No planning intentions were submitted for this session.");
       return null;
     }
 
-    // Format the data as "Username: Task Description" and join with newlines
     const mergedText = intentionsData
       .map((item: any) => {
         const username = item.profiles?.username ?? `User ${item.user_id?.substring?.(0, 5) ?? "unknown"}`;
         return `${username}: ${item.task_description}`;
       })
       .join("\n");
-      
+
     setAllIntentionsText(mergedText);
     return mergedText;
   };
 
+  // Helpers to sync current editable polygon back to state (called during drag)
+  const updatePolygonFromLayer = (layer: any) => {
+    if (!layer || typeof layer.getLatLngs !== "function") return;
+    const latlngs = layer.getLatLngs()?.[0] ?? [];
+    if (!latlngs || latlngs.length < 3) return;
+    const next = toJsonCoords(latlngs);
+    setPolygon(next);
+    savePolygon(next);
+    lastLayerRef.current = layer;
+  };
+
+  const updatePolygonFromFG = () => {
+    const fg = fgRef.current;
+    if (!fg || !fg.getLayers) return;
+    const layers = fg.getLayers();
+    for (const lyr of layers) {
+      if (lyr && typeof lyr.getLatLngs === "function") {
+        updatePolygonFromLayer(lyr);
+        break;
+      }
+    }
+  };
+
+  const liveEditHandler = (e: any) => {
+    if (!isMaster) return;
+    if (e?.layer && typeof e.layer.getLatLngs === "function") {
+      updatePolygonFromLayer(e.layer);
+      return;
+    }
+    if (e?.layers && typeof e.layers.eachLayer === "function") {
+      let handled = false;
+      e.layers.eachLayer((layer: any) => {
+        if (!handled && layer && typeof layer.getLatLngs === "function") {
+          updatePolygonFromLayer(layer);
+          handled = true;
+        }
+      });
+      if (handled) return;
+    }
+    if (lastLayerRef.current) {
+      updatePolygonFromLayer(lastLayerRef.current);
+      return;
+    }
+    updatePolygonFromFG();
+  };
+
+  // Attach live-edit listeners to the map so area/JSON update while dragging vertices.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMaster) return;
+    const handler = (e: any) => liveEditHandler(e);
+    map.on("draw:editvertex", handler);
+    map.on("draw:editmove", handler);
+    map.on("draw:editresize", handler);
+    return () => {
+      map.off("draw:editvertex", handler);
+      map.off("draw:editmove", handler);
+      map.off("draw:editresize", handler);
+    };
+  }, [isMaster]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Handle create/edit/delete (master only)
   const handleCreated = async (e: any) => {
@@ -301,7 +367,7 @@ export default function MapPage() {
       setPolygon(next);
       savePolygon(next);
 
-      // live edit updates
+      // live edit updates during drag
       layer.on("edit", () => {
         const updated = layer.getLatLngs()[0];
         const positions = toJsonCoords(updated);
@@ -323,6 +389,7 @@ export default function MapPage() {
         setPolygon(next);
         savePolygon(next);
 
+        // ensure continuous updates in subsequent drags too
         layer.on("edit", () => {
           const updated = layer.getLatLngs()[0];
           const positions = toJsonCoords(updated);
@@ -411,7 +478,6 @@ export default function MapPage() {
       }
 
       await resp.json();
-      setSendSuccess(true);
       
       // 2. NEW: Fetch intentions and POST them to the gemini endpoint
       const mergedText = await fetchAndDisplayIntentions();
@@ -430,10 +496,14 @@ export default function MapPage() {
           if (!promptResp.ok) {
             const txt = await promptResp.text().catch(() => "");
             setSendError(`Failed to save USER_PROMPT: ${promptResp.status} ${txt}`);
+            setIsSending(false);
+            return;
           }
         } catch (err: any) {
           console.error("Error posting prompt to backend:", err);
           setSendError(String(err));
+          setIsSending(false);
+          return;
         }
       }
       
@@ -495,6 +565,11 @@ export default function MapPage() {
             zoom={12}
             scrollWheelZoom={true}
             style={{ height: "100%", width: "100%" }}
+            ref={(instance: any) => {
+              if (instance) {
+                mapRef.current = instance;
+              }
+            }}
           >
             <TileLayer
               attribution='&copy; <a href="https://www.maptiler.com/copyright/">MapTiler</a> | &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -510,6 +585,10 @@ export default function MapPage() {
                   onCreated={handleCreated}
                   onEdited={handleEdited}
                   onDeleted={handleDeleted}
+                  // Live edit: update continuously while dragging vertices/handles (if supported by wrapper)
+                  onEditVertex={liveEditHandler}
+                  onEditMove={liveEditHandler}
+                  onEditResize={liveEditHandler}
                   draw={{
                     rectangle: false,
                     circle: false,
