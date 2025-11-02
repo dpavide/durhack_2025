@@ -1,5 +1,3 @@
-// frontend/app/map/[code]/page.tsx
-
 "use client";
 
 import dynamic from "next/dynamic";
@@ -508,11 +506,11 @@ export default function MapPage() {
       }
       
       setIsSending(false);
-      
-      router.push('/map-places'); 
+      setSendSuccess(true); // Set success before navigating
 
       // 3. **NAVIGATE** to the map-places page. That page will call GET /api/map/search on mount and render the markers.
-      router.push("/map-places");
+      //    We pass the session code as a query param so the next page knows which session to load.
+      router.push(`/map-places?session=${code}`);
     } catch (err: any) {
       setIsSending(false);
       setSendError(String(err));
@@ -628,12 +626,12 @@ export default function MapPage() {
           <div className="flex-1">
             {sendSuccess && (
               <div className="text-sm text-green-700 dark:text-green-300">
-                Polygon saved to server SAMPLE_DATA.
+                Polygon saved and intentions sent. Redirecting...
               </div>
             )}
             {sendError && (
               <div className="text-sm text-red-700 dark:text-red-300">
-                Error saving polygon: {sendError}
+                Error: {sendError}
               </div>
             )}
 
@@ -676,3 +674,4 @@ export default function MapPage() {
     </div>
   );
 }
+

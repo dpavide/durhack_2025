@@ -83,9 +83,16 @@ def set_prompt(req: SetPromptRequest) -> Dict[str, Any]:
 
     # Call the Gemini function (synchronously). Keep exceptions isolated.
     try:
+        # 🟢 DEBUGGING PRINT: Log that the Gemini call is starting
+        print(f"--- DEBUG: Calling Gemini with prompt length {len(req.prompt)} ---")
+        
         # call_gemini.generate_response(system_prompt=..., prompt=..., model=...)
         # We let call_gemini decide default model if not supplied.
         gemini_text = generate_fn(system_prompt=system_prompt, prompt=req.prompt)
+        
+        # 🟢 DEBUGGING PRINT: Log the response length (should be small if tag classifier is working)
+        print(f"--- DEBUG: Gemini returned response length: {len(gemini_text)} ---")
+        
         # Ensure we store a string (some wrappers return complex objects)
         gemini_text_str = gemini_text if isinstance(gemini_text, str) else str(gemini_text)
 
