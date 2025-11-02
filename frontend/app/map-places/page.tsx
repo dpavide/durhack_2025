@@ -34,26 +34,8 @@ type Pin = {
 };
 
 const LS_KEY = "map_pins_v1";
-const MAX_API_PINS = 10; // <-- change only here if you want a different limit
-
-/* ---------------------------
-   Helper: sample up to N elements without replacement
-   Uses Fisher-Yates shuffle to avoid duplicates.
----------------------------- */
-function sampleUpTo<T>(arr: T[], n: number): T[] {
-  if (!Array.isArray(arr) || arr.length === 0) return [];
-  const copy = arr.slice();
-  // Fisher-Yates shuffle until we've moved n items to the front
-  const len = copy.length;
-  const take = Math.min(n, len);
-  for (let i = 0; i < take; i++) {
-    const j = i + Math.floor(Math.random() * (len - i));
-    const tmp = copy[i];
-    copy[i] = copy[j];
-    copy[j] = tmp;
-  }
-  return copy.slice(0, take);
-}
+const MAX_API_PINS = 10;
+const MAX_SELECTIONS = 2;
 
 /* ---------------------------
    Random sampling helper
@@ -267,18 +249,10 @@ export default function MapPage() {
       try {
         const resp = await fetch(url);
         const data = await resp.json();
-
-        // Expecting OSM-like shape: { elements: [ {type, id, lat, lon, tags: {...}} ] }
-        const elements = Array.isArray(data?.elements) ? data.elements : [];
-
-        // Keep only elements with coordinates
-        const withCoords = elements.filter((el: any) => typeof el.lat === "number" && typeof el.lon === "number");
-
-        // Sample up to MAX_API_PINS random elements (no duplicates). If elements < MAX_API_PINS we take all.
+        const withCoords = (data?.elements ?? []).filter((el: any) => typeof el.lat === "number");
         const sampled = sampleUpTo(withCoords, MAX_API_PINS);
-
         const fromApi: Pin[] = sampled.map((el: any) => ({
-          id: String(el.id ?? `${el.type ?? "node"}_${Math.random().toString(36).slice(2, 8)}`),
+          id: String(el.id ?? `${el.type}_${Math.random().toString(36).slice(2, 8)}`),
           lat: el.lat,
           lon: el.lon,
           name: el.tags?.name,
@@ -286,8 +260,6 @@ export default function MapPage() {
           tags: el.tags,
           source: "json",
         }));
-
-        // Merge: keep existing user pins (source=user) and add API pins
         setPins((existing) => {
           const userPins = existing.filter((p) => p.source === "user");
           return [...fromApi, ...userPins];
@@ -332,13 +304,7 @@ export default function MapPage() {
         </div>
 
         <div className="w-full h-[70vh] rounded-lg border border-black/[.08] dark:border-white/[.145] shadow-md overflow-hidden relative">
-          <MapContainer
-            // Center changed to Durham, UK (lat, lon)
-            center={[54.7753, -1.5840]}
-            zoom={12}
-            scrollWheelZoom={true}
-            style={{ height: "100%", width: "100%" }}
-          >
+          <MapContainer center={[54.7753, -1.5840]} zoom={12} scrollWheelZoom style={{ height: "100%", width: "100%" }}>
             <TileLayer
               attribution='&copy; <a href="https://www.maptiler.com/copyright/">MapTiler</a>'
               url={`https://api.maptiler.com/maps/basic-v2/{z}/{x}/{y}.png?key=${process.env.NEXT_PUBLIC_MAPTILER_KEY}`}
@@ -356,51 +322,7 @@ export default function MapPage() {
                   icon={isSelected ? greenIcon : defaultIcon}
                   eventHandlers={{ click: () => toggleSelect(p.id) }}
                 >
-                  <Popup>
-                    <div className="text-sm leading-5">
-                      <p className="text-xl font-extrabold">
-                        Node{" "}
-                        <a
-                          href={`https://www.openstreetmap.org/node/${p.id}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sky-700 underline"
-                        >
-                          {p.id}
-                        </a>{" "}—
-                      </p>
-
-                      <p className="mt-2 text-lg font-bold">
-                        Tags <span className="ml-2 text-indigo-600 font-semibold">{tagCount}</span>
-                      </p>
-
-                      <div className="font-mono whitespace-pre-wrap">
-                        {tagEntries.map(([k, v]) => (
-                          <div key={k}>
-                            {k} = {String(v)}
-                          </div>
-                        ))}
-                      </div>
-
-                      {p.website && (
-                        <div className="mt-2">
-                          <a
-                            className="text-blue-600 underline break-all"
-                            href={p.website}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            {p.website}
-                          </a>
-                        </div>
-                      )}
-
-                      <p className="mt-3 text-2xl font-bold">Coordinates</p>
-                      <p className="text-sky-700 font-semibold">
-                        {p.lat.toFixed(6)} / {p.lon.toFixed(6)} <span className="text-zinc-600 text-xs">(lat/lon)</span>
-                      </p>
-                    </div>
-                  </Popup>
+                  <Popup>{p.name || "Unknown"}</Popup>
                 </Marker>
               );
             })}
@@ -413,13 +335,32 @@ export default function MapPage() {
           )}
         </div>
 
-        <div className="mt-4">
-          <div className="text-sm text-zinc-600 dark:text-zinc-300">
-            Showing <span className="font-medium">{pins.length}</span> markers (up to {MAX_API_PINS} from API + any user pins).
-          </div>
+        {/* Selection summary + continue */}
+        <div className="mt-6 flex flex-col items-center">
+          <button
+            disabled={selectedPins.length !== MAX_SELECTIONS}
+            onClick={handleContinue}
+            className={`px-6 py-3 rounded-full text-white font-semibold text-lg transition ${
+              selectedPins.length === MAX_SELECTIONS
+                ? "bg-emerald-600 hover:bg-emerald-700"
+                : "bg-gray-400 cursor-not-allowed"
+            }`}
+          >
+            Continue ({selectedPins.length}/{MAX_SELECTIONS})
+          </button>
+
+          {playersReady > 0 && (
+            <p className="mt-3 text-sm text-gray-600">
+              ✅ {playersReady}/{totalPlayers} players ready
+            </p>
+          )}
+          {allReady && (
+            <p className="mt-3 text-lg font-semibold text-emerald-600 animate-pulse">
+              All players ready! 🚀
+            </p>
+          )}
         </div>
       </div>
     </div>
   );
 }
-
