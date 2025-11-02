@@ -1,5 +1,3 @@
-# api/routers/gemini/gemini_router.py
-
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
@@ -14,6 +12,7 @@ router = APIRouter()
 # Note: these are process-local. Use persistent storage if you need durability or multi-instance sharing.
 USER_PROMPT_LOCK = threading.Lock()
 USER_PROMPT: Optional[str] = None
+USER_SYSTEM_PROMPT: Optional[str] = None  # store system prompt alongside user prompt if desired
 
 GEMINI_RESPONSE_LOCK = threading.Lock()
 GEMINI_RESPONSE: Optional[str] = None
@@ -21,18 +20,18 @@ GEMINI_RESPONSE: Optional[str] = None
 # Simple request model for setting a prompt
 class SetPromptRequest(BaseModel):
     prompt: str
-
+    system_prompt: Optional[str] = None  # <-- now accepted from client
 
 @router.post("/set_prompt")
 def set_prompt(req: SetPromptRequest) -> Dict[str, Any]:
     """
-    Set the module-level USER_PROMPT variable and immediately attempt to call Gemini
-    (via api.gemini.call_gemini.generate_response). The Gemini output is stored in
-    GEMINI_RESPONSE and can be retrieved via /get_response.
+    Set the module-level USER_PROMPT (and optionally USER_SYSTEM_PROMPT) variable and immediately
+    attempt to call Gemini (via api.gemini.call_gemini.generate_response). The Gemini output is
+    stored in GEMINI_RESPONSE and can be retrieved via /get_response.
 
-    Returns a JSON blob describing what happened.
+    The system prompt is supplied by the caller in req.system_prompt and is passed to generate_response.
     """
-    global USER_PROMPT, GEMINI_RESPONSE
+    global USER_PROMPT, USER_SYSTEM_PROMPT, GEMINI_RESPONSE
 
     if req.prompt is None or not isinstance(req.prompt, str) or req.prompt.strip() == "":
         raise HTTPException(status_code=400, detail="Missing or empty prompt")
@@ -40,6 +39,7 @@ def set_prompt(req: SetPromptRequest) -> Dict[str, Any]:
     # Save prompt (thread-safe)
     with USER_PROMPT_LOCK:
         USER_PROMPT = req.prompt
+        USER_SYSTEM_PROMPT = req.system_prompt if isinstance(req.system_prompt, str) else None
 
     # Reset previous gemini response
     with GEMINI_RESPONSE_LOCK:
@@ -49,7 +49,7 @@ def set_prompt(req: SetPromptRequest) -> Dict[str, Any]:
     # We import dynamically and protect against SystemExit (call_gemini may call sys.exit if key missing).
     try:
         cg = importlib.import_module("api.gemini.call_gemini")
-    except SystemExit as se:
+    except SystemExit:
         # call_gemini tried to sys.exit (likely missing GEMINI_API_KEY) — don't crash server
         logging.exception("api.gemini.call_gemini attempted to exit (likely missing GEMINI_API_KEY)")
         return {
@@ -68,9 +68,8 @@ def set_prompt(req: SetPromptRequest) -> Dict[str, Any]:
             "error": f"Import error: {str(exc)}"
         }
 
-    # Ensure the module exposes generate_response and optionally system_prompt
+    # Ensure the module exposes generate_response
     generate_fn = getattr(cg, "generate_response", None)
-    system_prompt = getattr(cg, "system_prompt", "")
 
     if not callable(generate_fn):
         logging.error("api.gemini.call_gemini.generate_response not found or not callable")
@@ -83,19 +82,18 @@ def set_prompt(req: SetPromptRequest) -> Dict[str, Any]:
 
     # Call the Gemini function (synchronously). Keep exceptions isolated.
     try:
-        # 🟢 DEBUGGING PRINT: Log that the Gemini call is starting
-        print(f"--- DEBUG: Calling Gemini with prompt length {len(req.prompt)} ---")
-        
-        # call_gemini.generate_response(system_prompt=..., prompt=..., model=...)
-        # We let call_gemini decide default model if not supplied.
-        gemini_text = generate_fn(system_prompt=system_prompt, prompt=req.prompt)
-        
-        # 🟢 DEBUGGING PRINT: Log the response length (should be small if tag classifier is working)
-        print(f"--- DEBUG: Gemini returned response length: {len(gemini_text)} ---")
-        
-        # Ensure we store a string (some wrappers return complex objects)
-        gemini_text_str = gemini_text if isinstance(gemini_text, str) else str(gemini_text)
+        # Use system_prompt supplied in request, default to empty string if not provided
+        system_prompt_to_use = req.system_prompt or ""
 
+        # 🟢 DEBUGGING PRINT: Log that the Gemini call is starting
+        print(f"--- DEBUG: Calling Gemini with prompt length {len(req.prompt)} and system_prompt length {len(system_prompt_to_use)} ---")
+        
+        gemini_text = generate_fn(system_prompt=system_prompt_to_use, prompt=req.prompt)
+        
+        # 🟢 DEBUGGING PRINT: Log the response length
+        gemini_text_str = gemini_text if isinstance(gemini_text, str) else str(gemini_text)
+        print(f"--- DEBUG: Gemini returned response length: {len(gemini_text_str)} ---")
+        
         with GEMINI_RESPONSE_LOCK:
             GEMINI_RESPONSE = gemini_text_str
 
@@ -106,7 +104,6 @@ def set_prompt(req: SetPromptRequest) -> Dict[str, Any]:
             "gemini_length": len(gemini_text_str),
         }
     except SystemExit:
-        # Protect against any unexpected sys.exit inside call_gemini
         logging.exception("call_gemini requested process exit while generating response")
         return {
             "status": "ok",
@@ -128,7 +125,7 @@ def set_prompt(req: SetPromptRequest) -> Dict[str, Any]:
 @router.get("/get_prompt")
 def get_prompt():
     """Return the currently-stored USER_PROMPT (or null)."""
-    return {"prompt": USER_PROMPT}
+    return {"prompt": USER_PROMPT, "system_prompt": USER_SYSTEM_PROMPT}
 
 
 @router.get("/get_response")
@@ -138,12 +135,13 @@ def get_response():
 
 
 @router.post("/generate")
-def generate_from_current_prompt(model: Optional[str] = None):
+def generate_from_current_prompt(model: Optional[str] = None, system_prompt: Optional[str] = None):
     """
     Trigger generation using the currently-stored USER_PROMPT and store to GEMINI_RESPONSE.
-    Optionally pass `model` to override the call_gemini default.
+    Optionally pass `model` to override the call_gemini default. Pass `system_prompt` to override
+    the previously-saved system prompt.
     """
-    global USER_PROMPT, GEMINI_RESPONSE
+    global USER_PROMPT, GEMINI_RESPONSE, USER_SYSTEM_PROMPT
 
     if not USER_PROMPT:
         raise HTTPException(status_code=400, detail="No USER_PROMPT set")
@@ -159,14 +157,23 @@ def generate_from_current_prompt(model: Optional[str] = None):
         raise HTTPException(status_code=500, detail=f"Import error: {str(exc)}")
 
     generate_fn = getattr(cg, "generate_response", None)
-    system_prompt = getattr(cg, "system_prompt", "")
 
     if not callable(generate_fn):
         logging.error("api.gemini.call_gemini.generate_response not found or not callable")
         raise HTTPException(status_code=500, detail="generate_response not available")
 
     try:
-        gemini_text = generate_fn(system_prompt=system_prompt, prompt=USER_PROMPT, model=model) if model else generate_fn(system_prompt=system_prompt, prompt=USER_PROMPT)
+        # system_prompt preference:
+        # 1. argument `system_prompt` if provided
+        # 2. saved USER_SYSTEM_PROMPT if available
+        # 3. empty string fallback
+        sp = system_prompt if isinstance(system_prompt, str) else (USER_SYSTEM_PROMPT or "")
+
+        if model:
+            gemini_text = generate_fn(system_prompt=sp, prompt=USER_PROMPT, model=model)
+        else:
+            gemini_text = generate_fn(system_prompt=sp, prompt=USER_PROMPT)
+
         gemini_text_str = gemini_text if isinstance(gemini_text, str) else str(gemini_text)
         with GEMINI_RESPONSE_LOCK:
             GEMINI_RESPONSE = gemini_text_str
