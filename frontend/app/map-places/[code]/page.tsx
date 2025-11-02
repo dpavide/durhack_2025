@@ -332,6 +332,7 @@ export default function MapPlacesPage() {
 
   // ----------------------------------------------------------------------
   // 🔑 CORE SYNC FIX 2: Simplified handleContinue (Only Submits Data)
+  //    + Propagate selections to participants who haven't submitted yet
   // ----------------------------------------------------------------------
   const handleContinue = async () => {
     if (!sessionId || !userId) {
@@ -355,6 +356,46 @@ export default function MapPlacesPage() {
     if (error) {
         console.error("Failed to submit selections:", error.message);
     }
+
+    // ---------- NEW: propagate the selections to participants who haven't submitted ----------
+    try {
+      // 1) Get participant list
+      const { data: participants } = await supabase
+        .from("room_participants")
+        .select("user_id")
+        .eq("room_code", sessionId);
+
+      const participantIds: string[] = (participants || []).map((p: any) => p.user_id);
+
+      if (participantIds.length > 0) {
+        // 2) Get existing player_selections for this session to know who already submitted
+        const { data: existingSelections } = await supabase
+          .from("player_selections")
+          .select("player_id")
+          .eq("session_id", sessionId);
+
+        const existingIds = new Set<string>((existingSelections || []).map((r: any) => r.player_id));
+
+        // 3) For participants missing selections, insert a row with the same selections & ready:true
+        const toInsert = participantIds
+          .filter((pid) => !existingIds.has(pid))
+          .map((pid) => ({
+            session_id: sessionId,
+            player_id: pid,
+            selections: selectedPinObjects,
+            ready: true,
+          }));
+
+        if (toInsert.length > 0) {
+          const { error: insertErr } = await supabase.from("player_selections").insert(toInsert);
+          if (insertErr) {
+            console.error("Failed to propagate selections to participants:", insertErr.message);
+          }
+        }
+      }
+    } catch (propErr) {
+      console.error("Error propagating selections:", propErr);
+    }
     
     // CRITICAL Fix: Removed channel handling here; readiness handled elsewhere
   };
@@ -375,7 +416,7 @@ export default function MapPlacesPage() {
 
   /* ---------------------------
      Render
-  ---------------------------- */
+  --------------------------- */
   if (loadError) {
     return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-red-50 text-red-700 p-6">
