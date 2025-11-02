@@ -7,8 +7,6 @@ import Link from "next/link";
 import { supabase } from "../../lib/supabaseClient";
 
 // --- ICON COMPONENTS ---
-
-export const dynamic = 'force-dynamic';
 // User/Profile Icon for Menu
 function UserProfileIcon(props: any) {
     return (
