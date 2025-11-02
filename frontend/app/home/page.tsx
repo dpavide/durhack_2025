@@ -7,7 +7,6 @@ import Link from "next/link";
 import { supabase } from "../../lib/supabaseClient";
 
 // --- ICON COMPONENTS ---
-
 // User/Profile Icon for Menu
 function UserProfileIcon(props: any) {
     return (
