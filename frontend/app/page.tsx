@@ -1,110 +1,192 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useState } from "react";
-import { createClient, type Session } from "@supabase/supabase-js";
-import Link from "next/link";
-import { useRouter } from "next/navigation"; // ✅ import router
+import { useRouter } from "next/navigation";
+import { supabase } from "../lib/supabaseClient";
 
-// Minimal Supabase client for the browser
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
-function UserMenu({ email }: { email: string }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="relative">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-2 rounded-md border border-black/8 px-3 py-2 text-sm transition-colors hover:border-transparent hover:bg-black/4 dark:border-white/[.145] dark:text-zinc-300 dark:hover:bg-[#1a1a1a]"
-      >
-        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-zinc-200 dark:bg-zinc-700">
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            className="text-zinc-700 dark:text-zinc-300"
-          >
-            <path
-              fill="currentColor"
-              d="M12 12c2.7 0 5-2.3 5-5s-2.3-5-5-5-5 2.3-5 5 2.3 5 5 5zm0 2c-3.3 0-10 1.7-10 5v3h20v-3c0-3.3-6.7-5-10-5z"
-            />
-          </svg>
-        </span>
-        <span className="max-w-[180px] truncate">{email}</span>
-      </button>
-      {open && (
-        <div className="absolute right-0 z-10 mt-2 w-48 rounded-md border border-black/8 bg-white shadow-lg dark:border-white/[.145] dark:bg-zinc-900">
-          <div className="py-1">
-            <Link
-              href="/user-info"
-              onClick={() => setOpen(false)}
-              className="block w-full px-4 py-2 text-left text-sm text-zinc-700 hover:bg-black/4 dark:text-zinc-300 dark:hover:bg-[#1a1a1a]"
-            >
-              User info
-            </Link>
-            <button
-              className="block w-full px-4 py-2 text-left text-sm text-zinc-700 hover:bg-black/4 dark:text-zinc-300 dark:hover:bg-[#1a1a1a]"
-              onClick={async () => {
-                await supabase.auth.signOut();
-                setOpen(false);
-              }}
-            >
-              Sign out
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-export default function Home() {
-  const [session, setSession] = useState<Session | null>(null);
+export default function AuthLanding() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const router = useRouter(); // ✅ add router
+  const [mode, setMode] = useState<"login" | "signup">("signup");
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
+  // Ensure that every signed-in user has a profile row
+  const ensureProfile = async (session: any) => {
+    try {
+      const user = session?.user;
+      if (!user) return;
+      const uname =
+        (user.user_metadata && user.user_metadata.username) ||
+        (user.email ? user.email.split("@")[0] : `user_${user.id.slice(0, 6)}`);
+
+      const { error: upsertErr } = await supabase.from("profiles").upsert(
+        {
+          id: user.id,
+          username: uname,
+          email: user.email,
+        },
+        { onConflict: "id" }
+      );
+
+      if (upsertErr && upsertErr.code !== "23505") throw upsertErr;
+    } catch {
+      // Silent fail – don’t block redirect
+    }
+  };
+
+  // Redirect if already logged in
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setLoading(false);
+    let active = true;
+    (async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!active) return;
 
-      // ✅ redirect if logged in
       if (data.session) {
+        await ensureProfile(data.session);
+        router.replace("/home");
+      } else {
+        setLoading(false);
+      }
+    })();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (_e, session) => {
+      if (session) {
+        await ensureProfile(session);
         router.replace("/home");
       }
     });
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, s) => {
-      setSession(s);
-      if (s) router.replace("/home"); // ✅ also redirect if session changes
-    });
-
-    return () => subscription.unsubscribe();
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
   }, [router]);
 
-  if (loading) return null; // or a loading spinner
+  const handleLogin = async () => {
+    setError(null);
+    if (!email || !password) {
+      setError("Please fill in all required fields.");
+      return;
+    }
+    const { error: signInErr } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    if (signInErr) setError(signInErr.message);
+  };
+
+  const handleSignUp = async () => {
+    setError(null);
+    if (!email || !password || !username) {
+      setError("Please fill in all required fields.");
+      return;
+    }
+    const { error: signUpErr } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { username } },
+    });
+    if (signUpErr) setError(signUpErr.message);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
+        <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-center py-32 px-16 bg-white dark:bg-black">
+          <span className="text-sm text-zinc-500">Loading…</span>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <div className="w-full mb-8 flex justify-end">
-          {session ? (
-            <UserMenu email={session.user.email ?? session.user.id} />
-          ) : (
-            <Link
-              href="/login"
-              className="inline-flex h-10 items-center rounded-md border border-black/8 px-4 text-sm transition-colors hover:border-transparent hover:bg-black/4 dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
-            >
-              Sign Up / Login
-            </Link>
-          )}
+      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-center py-32 px-16 bg-white dark:bg-black sm:items-start">
+        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left mb-8">
+          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
+            MeetSpace
+          </h1>
         </div>
-        {/* Your homepage content */}
+
+        <div className="w-full max-w-md mx-auto space-y-6">
+          {/* Toggle between Login / Signup */}
+          <div className="flex gap-2 justify-center">
+            <button
+              type="button"
+              className={`flex h-10 items-center rounded-md px-4 text-sm transition-colors ${
+                mode === "signup"
+                  ? "bg-black text-white dark:bg-white dark:text-black"
+                  : "border border-black/8 hover:bg-black/4 dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
+              }`}
+              onClick={() => setMode("signup")}
+            >
+              Sign Up
+            </button>
+            <button
+              type="button"
+              className={`flex h-10 items-center rounded-md px-4 text-sm transition-colors ${
+                mode === "login"
+                  ? "bg-black text-white dark:bg-white dark:text-black"
+                  : "border border-black/8 hover:bg-black/4 dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
+              }`}
+              onClick={() => setMode("login")}
+            >
+              Login
+            </button>
+          </div>
+
+          {/* Auth form */}
+          <div className="space-y-4">
+            {mode === "signup" && (
+              <div>
+                <label className="block mb-1 text-sm">Username</label>
+                <input
+                  className="w-full rounded-md border border-black/8 px-3 py-2 text-sm dark:border-white/[.145] bg-transparent"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="your_username"
+                />
+              </div>
+            )}
+            <div>
+              <label className="block mb-1 text-sm">Email</label>
+              <input
+                type="email"
+                className="w-full rounded-md border border-black/8 px-3 py-2 text-sm dark:border-white/[.145] bg-transparent"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+              />
+            </div>
+            <div>
+              <label className="block mb-1 text-sm">Password</label>
+              <input
+                type="password"
+                className="w-full rounded-md border border-black/8 px-3 py-2 text-sm dark:border-white/[.145] bg-transparent"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+              />
+            </div>
+
+            {error && (
+              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+            )}
+
+            <button
+              type="button"
+              className="w-full flex h-10 items-center justify-center rounded-md bg-black text-white dark:bg-white dark:text-black px-4 text-sm transition-colors hover:opacity-90"
+              onClick={mode === "signup" ? handleSignUp : handleLogin}
+            >
+              {mode === "signup" ? "Sign Up" : "Login"}
+            </button>
+          </div>
+        </div>
       </main>
     </div>
   );
