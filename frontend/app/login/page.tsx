@@ -82,9 +82,9 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-black">
-      <div className="w-full max-w-md rounded-lg border border-black/8 dark:border-white/[.145] bg-white dark:bg-zinc-900 p-6">
-        <h2 className="text-lg font-semibold mb-4 text-zinc-900 dark:text-zinc-100">
+    <div className="min-h-screen flex items-center justify-center bg-zinc-50">
+      <div className="w-full max-w-md rounded-lg border border-black/8 bg-white p-6">
+        <h2 className="text-lg font-semibold mb-4 text-zinc-900">
           {mode === "signin" ? "Sign in" : "Create account"}
         </h2>
 
@@ -112,7 +112,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full h-10 rounded-md border border-black/8 px-4 text-sm transition-colors hover:border-transparent hover:bg-black/4 dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
+            className="w-full h-10 rounded-md border border-black/8 px-4 text-sm transition-colors hover:border-transparent hover:bg-black/4"
           >
             {loading ? "Loading..." : mode === "signin" ? "Sign in" : "Sign up"}
           </button>
@@ -137,7 +137,7 @@ export default function LoginPage() {
           </button>
         </div>
 
-        <a href="/" className="mt-4 block text-sm text-zinc-600 dark:text-zinc-300">
+        <a href="/" className="mt-4 block text-sm text-zinc-600">
           Back to home
         </a>
       </div>

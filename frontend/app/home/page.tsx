@@ -134,14 +134,6 @@ export default function Home() {
       <main className="flex min-h-screen w-full max-w-lg flex-col items-center justify-between py-20 px-8 bg-white rounded-2xl shadow-2xl border border-gray-100">
         {/* Top-right controls */}
         <div className="w-full mb-16 flex justify-end gap-3">
-          {/* NEW: How it works button */}
-          <Link
-            href="/how-it-works"
-            className="inline-flex h-10 items-center rounded-xl border border-gray-300 px-4 text-sm transition-colors hover:bg-gray-100 shadow-sm text-gray-700 font-medium"
-          >
-            How it works
-          </Link>
-
           {session ? (
             <UserMenu email={session.user.email ?? session.user.id} />
           ) : (
@@ -182,7 +174,15 @@ export default function Home() {
         </div>
 
         {/* Action Buttons (Bottom) */}
-        <div className="flex w-full flex-col gap-4 text-base font-medium">
+        <div className="w-full max-w-md mx-auto flex flex-col items-stretch gap-3">
+          {/* How it Works — same size/font as Join button */}
+          <Link
+            href="/descriptive-page"
+            className="flex h-14 w-full items-center justify-center rounded-xl border border-gray-300 px-5 text-gray-700 transition-colors hover:bg-gray-100 shadow-md text-lg font-semibold"
+          >
+            How it Works
+          </Link>
+
           <Link
             className="flex h-14 w-full items-center justify-center rounded-xl bg-blue-600 px-5 text-white shadow-lg transition-colors hover:bg-blue-700 text-lg font-semibold"
             href="/create"
