@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 // hi 
 export const metadata: Metadata = {
-  title: "MeetSpace",
+  title: "MeetSpaces",
   description: "A collaborative space for planning and brainstorming",
 };
 
