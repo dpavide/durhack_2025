@@ -84,34 +84,37 @@ function LocationMarker() {
   const map = useMap();
 
   useEffect(() => {
-    if (!navigator.geolocation) {
-      console.warn("Geolocation is not supported by this browser.");
-      return;
-    }
-
-    // Try to fly to location on initial find
-    navigator.geolocation.getCurrentPosition((pos) => {
-      const latLng: LatLngExpression = [pos.coords.latitude, pos.coords.longitude];
-      setPosition(latLng);
-      map.flyTo(latLng, 14); // Zoom to user's location
-    }, () => {
-      console.warn("User denied location access or error occurred.");
-    });
-    
-    // Watch position for updates
-    const watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        setPosition([pos.coords.latitude, pos.coords.longitude]);
-      },
-      (err) => {
-        console.warn(`Geolocation watch error: ${err.message}`);
+    // FIX: Wrap logic in map.whenReady() to ensure map is fully initialized
+    map.whenReady(() => {
+      if (!navigator.geolocation) {
+        console.warn("Geolocation is not supported by this browser.");
+        return;
       }
-    );
 
-    // Cleanup watcher on unmount
-    return () => {
-      navigator.geolocation.clearWatch(watchId);
-    };
+      // Try to fly to location on initial find
+      navigator.geolocation.getCurrentPosition((pos) => {
+        const latLng: LatLngExpression = [pos.coords.latitude, pos.coords.longitude];
+        setPosition(latLng);
+        map.flyTo(latLng, 14); // Zoom to user's location
+      }, () => {
+        console.warn("User denied location access or error occurred.");
+      });
+      
+      // Watch position for updates
+      const watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          setPosition([pos.coords.latitude, pos.coords.longitude]);
+        },
+        (err) => {
+          console.warn(`Geolocation watch error: ${err.message}`);
+        }
+      );
+
+      // Cleanup watcher on unmount
+      return () => {
+        navigator.geolocation.clearWatch(watchId);
+      };
+    });
   }, [map]);
 
   return position === null ? null : (
@@ -503,3 +506,4 @@ export default function MapPlacesPage() { // Renamed component for clarity
     </div>
   );
 }
+
