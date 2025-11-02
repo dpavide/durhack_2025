@@ -13,7 +13,7 @@ export default function AuthLanding() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  // Ensure that every signed-in user has a profile row
+  // Ensure that every signed-in user has a profile row (UNCHANGED)
   const ensureProfile = async (session: any) => {
     try {
       const user = session?.user;
@@ -33,11 +33,11 @@ export default function AuthLanding() {
 
       if (upsertErr && upsertErr.code !== "23505") throw upsertErr;
     } catch {
-      // Silent fail – don’t block redirect
+      /* silent */
     }
   };
 
-  // Redirect if already logged in
+  // Redirect if already logged in (UNCHANGED)
   useEffect(() => {
     let active = true;
     (async () => {
@@ -96,95 +96,123 @@ export default function AuthLanding() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-        <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-center py-32 px-16 bg-white dark:bg-black">
-          <span className="text-sm text-zinc-500">Loading…</span>
-        </main>
+      <div className="min-h-screen grid place-items-center bg-gradient-to-b from-white to-gray-50 dark:from-black dark:to-zinc-950">
+        <div className="card bg-white/80 dark:bg-zinc-900/70 backdrop-blur p-6 text-center">
+          <svg
+            className="animate-spin h-8 w-8 text-indigo-600 mx-auto mb-3"
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+          >
+            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.37 0 0 5.37 0 12h4z" />
+          </svg>
+          <p className="text-slate-700 dark:text-slate-200 font-medium">Loading…</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-center py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left mb-8">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
+    <div className="min-h-screen bg-gradient-to-b from-white to-gray-50 dark:from-black dark:to-zinc-950">
+      {/* Top brand */}
+      <header className="container-hero py-8">
+        <div className="flex items-center gap-3">
+          <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-600 shadow-sm">
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" strokeWidth="2" />
+              <circle cx="12" cy="7" r="4" strokeWidth="2" />
+            </svg>
+          </span>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
             MeetSpace
           </h1>
         </div>
+      </header>
 
-        <div className="w-full max-w-md mx-auto space-y-6">
-          {/* Toggle between Login / Signup */}
-          <div className="flex gap-2 justify-center">
-            <button
-              type="button"
-              className={`flex h-10 items-center rounded-md px-4 text-sm transition-colors ${
-                mode === "signup"
-                  ? "bg-black text-white dark:bg-white dark:text-black"
-                  : "border border-black/8 hover:bg-black/4 dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
-              }`}
-              onClick={() => setMode("signup")}
-            >
-              Sign Up
-            </button>
-            <button
-              type="button"
-              className={`flex h-10 items-center rounded-md px-4 text-sm transition-colors ${
-                mode === "login"
-                  ? "bg-black text-white dark:bg-white dark:text-black"
-                  : "border border-black/8 hover:bg-black/4 dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
-              }`}
-              onClick={() => setMode("login")}
-            >
-              Login
-            </button>
-          </div>
+      {/* Auth card */}
+      <main className="container-hero pb-24">
+        <div className="mx-auto max-w-lg">
+          <div className="card bg-white/90 dark:bg-zinc-900/70 backdrop-blur p-8">
+            {/* Mode toggle */}
+            <div className="mb-6 flex justify-center gap-2">
+              <button
+                type="button"
+                className={`h-10 px-4 rounded-full text-sm font-medium transition ${
+                  mode === "signup"
+                    ? "bg-indigo-600 text-white"
+                    : "border border-gray-300 dark:border-white/20 text-slate-700 dark:text-slate-200 hover:bg-gray-50/60"
+                }`}
+                onClick={() => setMode("signup")}
+              >
+                Sign Up
+              </button>
+              <button
+                type="button"
+                className={`h-10 px-4 rounded-full text-sm font-medium transition ${
+                  mode === "login"
+                    ? "bg-indigo-600 text-white"
+                    : "border border-gray-300 dark:border-white/20 text-slate-700 dark:text-slate-200 hover:bg-gray-50/60"
+                }`}
+                onClick={() => setMode("login")}
+              >
+                Login
+              </button>
+            </div>
 
-          {/* Auth form */}
-          <div className="space-y-4">
-            {mode === "signup" && (
+            {/* Form */}
+            <div className="space-y-4">
+              {mode === "signup" && (
+                <div>
+                  <label className="block mb-1 text-sm text-slate-600 dark:text-slate-300">Username</label>
+                  <input
+                    className="w-full rounded-xl border border-gray-300 dark:border-white/20 bg-white/70 dark:bg-zinc-900/40 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/60"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="your_username"
+                  />
+                </div>
+              )}
+
               <div>
-                <label className="block mb-1 text-sm">Username</label>
+                <label className="block mb-1 text-sm text-slate-600 dark:text-slate-300">Email</label>
                 <input
-                  className="w-full rounded-md border border-black/8 px-3 py-2 text-sm dark:border-white/[.145] bg-transparent"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="your_username"
+                  type="email"
+                  className="w-full rounded-xl border border-gray-300 dark:border-white/20 bg-white/70 dark:bg-zinc-900/40 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/60"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
                 />
               </div>
-            )}
-            <div>
-              <label className="block mb-1 text-sm">Email</label>
-              <input
-                type="email"
-                className="w-full rounded-md border border-black/8 px-3 py-2 text-sm dark:border-white/[.145] bg-transparent"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-              />
-            </div>
-            <div>
-              <label className="block mb-1 text-sm">Password</label>
-              <input
-                type="password"
-                className="w-full rounded-md border border-black/8 px-3 py-2 text-sm dark:border-white/[.145] bg-transparent"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-              />
+
+              <div>
+                <label className="block mb-1 text-sm text-slate-600 dark:text-slate-300">Password</label>
+                <input
+                  type="password"
+                  className="w-full rounded-xl border border-gray-300 dark:border-white/20 bg-white/70 dark:bg-zinc-900/40 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/60"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                />
+              </div>
+
+              {error && (
+                <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>
+              )}
+
+              <button
+                type="button"
+                className="btn btn-primary w-full h-11 text-base"
+                onClick={mode === "signup" ? handleSignUp : handleLogin}
+              >
+                {mode === "signup" ? "Sign Up" : "Login"}
+              </button>
             </div>
 
-            {error && (
-              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-            )}
-
-            <button
-              type="button"
-              className="w-full flex h-10 items-center justify-center rounded-md bg-black text-white dark:bg-white dark:text-black px-4 text-sm transition-colors hover:opacity-90"
-              onClick={mode === "signup" ? handleSignUp : handleLogin}
-            >
-              {mode === "signup" ? "Sign Up" : "Login"}
-            </button>
+            {/* Helper text */}
+            <p className="mt-4 text-center text-xs text-slate-500 dark:text-slate-400">
+              By continuing you agree to our Terms and Privacy Policy.
+            </p>
           </div>
         </div>
       </main>
