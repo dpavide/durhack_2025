@@ -11,6 +11,14 @@ const Arrow = ({ dir = "right", className = "" }: { dir?: "right" | "down"; clas
   </span>
 );
 
+// New Checkmark Icon for UI
+const Checkmark = (props: any) => (
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="20 6 9 17 4 12"></polyline>
+  </svg>
+);
+
+// Types remain the same
 type Place = {
   element_id: number | string;
   name: string;
@@ -22,12 +30,10 @@ type Place = {
     relative_time_description?: string;
     text?: string;
   }[];
-  // Added from player_selections 'pin' type, in case gmap fails
   lat?: number; 
   lon?: number;
 };
 
-// This is the type of the 'pin' object stored in player_selections.selections
 type SelectionPin = {
   id: string;
   lat: number;
@@ -37,6 +43,7 @@ type SelectionPin = {
   source?: "json" | "user";
 };
 
+// --- MAIN COMPONENT ---
 export default function ListingsPage() {
   const router = useRouter();
   const params = useParams<{ code: string }>();
@@ -47,12 +54,16 @@ export default function ListingsPage() {
   const [votes, setVotes] = useState<{ user_id: string; place_id: string }[]>([]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({}); // place_id -> expanded?
 
-  // --- NEW: State for dynamically fetched places ---
   const [places, setPlaces] = useState<Place[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  // --- REMOVED: useMemo for places (was hardcoded) ---
+  // --- NEW: Track the user's current vote ID ---
+  const userVoteId = useMemo(() => {
+    if (!userId) return null;
+    const vote = votes.find((v) => v.user_id === userId);
+    return vote ? vote.place_id : null;
+  }, [votes, userId]);
 
   const placeIdList = useMemo(() => places.map((p) => String(p.element_id)), [places]);
 
@@ -65,16 +76,14 @@ export default function ListingsPage() {
     return map;
   }, [votes, placeIdList]);
 
-  const userHasVoted = useMemo(() => {
-    if (!userId) return false;
-    return votes.some((v) => v.user_id === userId);
-  }, [votes, userId]);
-
+  // --- CRITICAL FIX: Winning place must have votes equal to ALL participants ---
   const winningPlaceId = useMemo(() => {
     const total = participants.length;
-    if (total === 0 || places.length === 0) return null; // Guard for no participants/places
+    if (total === 0 || places.length === 0) return null; 
+    
+    // Check if any place has ALL votes
     for (const pid of placeIdList) {
-      if ((voteCounts.get(pid) ?? 0) >= total) return pid;
+      if ((voteCounts.get(pid) ?? 0) === total) return pid; // Must be strictly equal to total
     }
     return null;
   }, [participants.length, placeIdList, voteCounts, places.length]);
@@ -104,7 +113,7 @@ export default function ListingsPage() {
     }
   }, [code]);
 
-  // --- UPDATED: Function to fetch and process listings ---
+  // Function to fetch and process listings (Unchanged)
   const fetchListings = useCallback(async (roomCode: string) => {
     if (!roomCode) return;
     
@@ -136,15 +145,15 @@ export default function ListingsPage() {
           return;
       }
 
-      // 3. Fetch detailed GMap data for each unique place
+      // 3. Fetch detailed GMap data for each unique place (omitted implementation for brevity, logic remains the same)
       const BACKEND_BASE = (process.env.NEXT_PUBLIC_BACKEND_URL ?? "").replace(/\/$/, "");
 
-      const gmapApiFetches = uniquePlaces.map(async (place) => { // Make async
+      const gmapApiFetches = uniquePlaces.map(async (place) => { 
         const params = new URLSearchParams({
-          name: place.name || "Location", // GMap API needs a name
+          name: place.name || "Location", 
           lat: place.lat.toString(),
           lng: place.lon.toString(),
-          radius: "50" // Small radius since we have exact coords
+          radius: "50"
         });
         const url = `${BACKEND_BASE}/api/gmap/search?${params.toString()}`;
         
@@ -152,16 +161,12 @@ export default function ListingsPage() {
           const res = await fetch(url);
           if (res.ok) {
             const gmapData = await res.json();
-            // *** FIX ***: Merge GMap data ONTO the original place
-            // This ensures we keep 'place.id' as a fallback
             return { ...place, ...gmapData };
           }
-          // GMap search failed, return basic info, ensuring 'element_id' is set
           console.warn(`GMap search failed for ${place.name} (status: ${res.status})`);
           return { ...place, element_id: place.id, reviews: [], rating: null };
         } catch (e) {
           console.error(`Failed to fetch GMap data for ${place.name}:`, e);
-          // On fetch error, also return basic info
           return { ...place, element_id: place.id, reviews: [], rating: null };
         }
       });
@@ -170,8 +175,6 @@ export default function ListingsPage() {
 
       // 4. Format and set state
       const formattedPlaces: Place[] = gmapResults.map((p: any) => ({
-        // *** FIX ***: Prioritize gmap's element_id, but ALWAYS fall back to p.id
-        // (which is the original SelectionPin 'id')
         element_id: String(p.element_id ?? p.id), 
         name: p.name ?? "Unknown Location",
         rating: p.rating,
@@ -185,10 +188,12 @@ export default function ListingsPage() {
     } catch (err: any) {
       console.error("Error fetching listings:", err);
       setError(err.message || "Failed to load listings.");
+    } finally {
+        setLoading(false);
     }
-  }, []); // Empty dependency array, it's a stable function
+  }, []);
 
-  // --- UPDATED: Main useEffect to run all fetches ---
+  // Main useEffect to run all fetches
   useEffect(() => {
     (async () => {
       const { data: s } = await supabase.auth.getSession();
@@ -204,13 +209,13 @@ export default function ListingsPage() {
       await Promise.all([
         refreshParticipants(), 
         refreshVotes(),
-        fetchListings(code) // 'code' is from useParams, stable here
+        fetchListings(code) 
       ]);
-      setLoading(false);
+      // set loading false inside fetchListings
     })();
   }, [code, router, refreshParticipants, refreshVotes, fetchListings]);
 
-  // Realtime sync for participants and votes
+  // Realtime sync for participants and votes (Unchanged)
   useEffect(() => {
     if (!code) return;
 
@@ -238,30 +243,61 @@ export default function ListingsPage() {
     };
   }, [code, refreshParticipants, refreshVotes]);
 
-  // Redirect when any place reaches unanimous votes
+  // Redirect when any place reaches unanimous votes (Unchanged)
   useEffect(() => {
     if (winningPlaceId) {
       router.replace(`/result/${code}`);
     }
   }, [winningPlaceId, router, code]);
 
+  // --- CRITICAL FIX: Vote/Unvote Handler ---
   const handleVote = async (place_id: string) => {
-    if (!userId || !code || userHasVoted) return;
-    const { error } = await supabase
-      .from("place_votes")
-      .upsert(
-        { room_code: code, user_id: userId, place_id },
-        { onConflict: "room_code,user_id", ignoreDuplicates: false }
-      );
-    if (error) {
-      console.error("Vote error:", error);
-      return;
+    if (!userId || !code) return;
+    
+    // Check if the user is voting for the place they already voted for (cancel vote)
+    const isUnvoting = userVoteId === place_id;
+
+    if (isUnvoting) {
+      // 1. DELETE the vote from the database
+      const { error } = await supabase
+        .from("place_votes")
+        .delete()
+        .eq("room_code", code)
+        .eq("user_id", userId);
+
+      if (error) {
+        console.error("Unvote error:", error);
+        return;
+      }
+
+      // 2. Optimistic update: remove the vote from state
+      setVotes((prev) => prev.filter((v) => v.user_id !== userId));
+
+    } else {
+      // 1. UPSERT (create or update) the new vote
+      const { error } = await supabase
+        .from("place_votes")
+        .upsert(
+          { room_code: code, user_id: userId, place_id },
+          { onConflict: "room_code,user_id", ignoreDuplicates: false }
+        );
+
+      if (error) {
+        console.error("Vote error:", error);
+        return;
+      }
+      
+      // 2. Optimistic update: replace or add the vote in state
+      setVotes((prev) => {
+        // Remove existing vote by this user
+        const filtered = prev.filter((v) => v.user_id !== userId);
+        // Add the new vote
+        return [...filtered, { user_id: userId, place_id }];
+      });
     }
-    // optimistic update
-    setVotes((prev) => [...prev, { user_id: userId, place_id }]);
   };
 
-  // --- UPDATED: Loading and Error States ---
+  // --- RENDER LOGIC (Loading, Error, Empty states remain the same) ---
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -277,23 +313,13 @@ export default function ListingsPage() {
     );
   }
 
-  if (error) {
+  if (error || places.length === 0) {
+    const message = error || "No places found for this session.";
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
          <script src="https://cdn.tailwindcss.com"></script>
          <div className="text-center p-6 bg-white rounded-xl shadow-xl">
-           <p className="text-red-600 font-medium">Error: {error}</p>
-         </div>
-      </div>
-    );
-  }
-  
-  if (places.length === 0) {
-     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-         <script src="https://cdn.tailwindcss.com"></script>
-         <div className="text-center p-6 bg-white rounded-xl shadow-xl">
-            <p className="text-gray-700 font-medium">No places found for this session.</p>
+           <p className={`font-medium ${error ? 'text-red-600' : 'text-gray-700'}`}>{message}</p>
          </div>
       </div>
     );
@@ -310,29 +336,65 @@ export default function ListingsPage() {
       <header className="p-4 bg-white shadow-md">
         <div className="container mx-auto flex items-center justify-between">
           <h1 className="text-xl font-bold text-gray-800">
-            Listings for <span className="text-blue-600">{code}</span>
+            Vote for a Place in <span className="text-blue-600">{code}</span>
           </h1>
           <div className="text-sm text-gray-600">
-            Users: <span className="font-semibold">{participants.length}</span>
+            Total Voters: <span className="font-semibold text-gray-800">{participants.length}</span>
           </div>
         </div>
       </header>
 
       <main className="container mx-auto p-4 sm:p-6 lg:p-8 flex-grow">
+        <p className="mb-4 text-gray-600 text-center">
+            Click a **Vote** button to select your choice. Click it again to **cancel** your vote.
+        </p>
         <div className="space-y-4">
           {places.map((place) => {
-            const pid = String(place.element_id); // This line is now safe
+            const pid = String(place.element_id);
             const isOpen = !!expanded[pid];
             const votesForPlace = voteCounts.get(pid) ?? 0;
+            const isVotedByMe = userVoteId === pid;
             const hasReviews = place.reviews && place.reviews.length > 0;
+            const isUnanimousWinner = votesForPlace === participants.length && participants.length > 0;
+            const votePercentage = participants.length > 0 ? (votesForPlace / participants.length) * 100 : 0;
+
+            let buttonText = isVotedByMe ? "Cancel Vote" : "Vote";
+            let buttonClass = isVotedByMe ? "bg-red-500 hover:bg-red-600" : "bg-blue-600 hover:bg-blue-700";
+            
+            if (isUnanimousWinner) {
+                buttonText = "Winner!";
+                buttonClass = "bg-emerald-600 cursor-default";
+            } else if (!isVotedByMe && userVoteId) {
+                // If I have voted for *another* option, disable this button visually
+                buttonClass = "bg-gray-400 cursor-pointer"; // Re-enable click for unvote functionality
+            }
+
 
             return (
-              <div key={pid} className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+              <div key={pid} className={`bg-white border-2 rounded-xl shadow-lg p-4 sm:p-5 transition-all duration-300 
+                                      ${isVotedByMe ? 'border-blue-500 shadow-blue-200' : 'border-gray-200'}`}>
+                
+                {/* Voting Progress Bar (Visual Queue) */}
+                <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden mb-3">
+                    <div 
+                        className={`h-full rounded-full transition-all duration-500 ease-out ${isUnanimousWinner ? 'bg-emerald-500' : 'bg-blue-500'}`} 
+                        style={{ width: `${votePercentage}%` }}
+                    />
+                </div>
+
                 <div className="flex items-start gap-4">
                   <div className="flex-1 min-w-0">
                     {/* Header row: name + rating */}
                     <div className="flex items-center justify-between gap-3">
-                      <h2 className="text-lg sm:text-xl font-bold text-gray-900 truncate">{place.name}</h2>
+                      <h2 className="text-lg sm:text-xl font-bold text-gray-900 truncate flex items-center">
+                          {isVotedByMe && !isUnanimousWinner && (
+                              <Checkmark className="w-5 h-5 mr-2 text-blue-500 shrink-0" />
+                          )}
+                          {isUnanimousWinner && (
+                              <span className="text-xl mr-2" role="img" aria-label="Trophy">🏆</span>
+                          )}
+                          {place.name}
+                      </h2>
                       <div className="shrink-0 text-sm sm:text-base text-gray-700">
                         Rating: <span className="font-semibold">{place.rating ?? "N/A"}</span>
                       </div>
@@ -352,7 +414,7 @@ export default function ListingsPage() {
                        <p className="mt-1 text-xs sm:text-sm text-gray-500">No reviews available</p>
                     )}
 
-                    {/* Reviews section */}
+                    {/* Reviews section (omitted detail) */}
                     {isOpen && hasReviews && (
                       <div className="mt-3 space-y-3">
                         {(place.reviews ?? []).slice(0, 2).map((r, idx) => (
@@ -371,21 +433,22 @@ export default function ListingsPage() {
                     )}
                   </div>
 
-                  {/* Vote button */}
-                  <div className="shrink-0">
+                  {/* Vote button & count */}
+                  <div className="shrink-0 flex flex-col items-center">
                     <button
                       type="button"
-                      disabled={userHasVoted}
+                      // Disable if winner is decided, otherwise allow vote/unvote
+                      disabled={isUnanimousWinner} 
                       onClick={() => handleVote(pid)}
-                      className={`px-4 py-2 rounded-lg text-white text-sm font-medium ${
-                        userHasVoted ? "bg-gray-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"
-                      }`}
-                      title={userHasVoted ? "You have already voted" : "Vote for this place"}
+                      className={`px-4 py-2 rounded-lg text-white text-sm font-medium transition-colors ${buttonClass}`}
+                      title={isUnanimousWinner ? "Decision reached" : isVotedByMe ? "Click to cancel your vote" : "Vote for this place"}
                     >
-                      Vote
+                      {buttonText}
                     </button>
-                    <div className="mt-2 text-xs text-gray-600 text-center">
-                      {votesForPlace}/{participants.length} votes
+                    
+                    {/* Visual Vote Count */}
+                    <div className="mt-2 text-sm font-semibold text-gray-800 text-center">
+                        {votesForPlace} / {participants.length}
                     </div>
                   </div>
                 </div>
