@@ -53,14 +53,14 @@ export default function HowItWorksPage() {
           balancing travel time fairly and explaining every recommendation.
         </p>
 
-        {/* NEW: Sign-in button back to login */}
+        {/* NEW: Back to Home */}
         <div className="mt-6">
           <Link
-            href="/login"
+            href="/home"
             className="inline-flex items-center rounded-full px-5 py-2.5 text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition"
-            aria-label="Go to sign in page"
+            aria-label="Go to home"
           >
-            Sign in
+            Back to Home
           </Link>
         </div>
       </section>
