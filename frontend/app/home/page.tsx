@@ -148,7 +148,7 @@ export default function Home() {
               </svg>
             </span>
             <span className="text-2xl font-extrabold tracking-tight text-slate-900">
-              MeetSpace
+              MeetSpaces
             </span>
           </Link>
 
@@ -172,11 +172,11 @@ export default function Home() {
         <section className="mx-auto max-w-6xl px-6 pt-8 pb-14">
           <div className="max-w-4xl">
             <h1 className="text-[clamp(2.2rem,6vw,4.2rem)] font-extrabold leading-[1.05] tracking-tight text-slate-900">
-              Collaborative planning for your team
+              Start a meeting with anyone, anywhere
             </h1>
             <p className="mt-5 max-w-3xl text-xl text-slate-600">
-              Powered by real-time data. Coordinate schedules, manage meetings,
-              and bring your team together effortlessly.
+              Powered by real-time data. Coordinate schedules, manage locations,
+              and make any kind of meeting happen.
             </p>
 
             {/* CTAs */}
@@ -203,13 +203,13 @@ export default function Home() {
             <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
               <h3 className="font-semibold text-slate-900">Smart suggestions</h3>
               <p className="mt-2 text-slate-600">
-                AI ranks options by fairness, travel time, opening hours & weather.
+                AI ranks options by fairness, travel time, opening hours & reviews.
               </p>
             </div>
             <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
               <h3 className="font-semibold text-slate-900">Real-time collaboration</h3>
               <p className="mt-2 text-slate-600">
-                Create or join a plan, vote or auto-choose, and share instantly.
+                Create or join a plan, vote or auto-choose and share instantly.
               </p>
             </div>
             <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
