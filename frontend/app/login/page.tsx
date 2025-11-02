@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient, type Session } from "@supabase/supabase-js";
@@ -8,7 +9,8 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
-// I am waiting for szymon to finish so I can do frontend-h integration 
+
+// I am waiting for szymon to finish so I can do frontend-h integration
 export default function LoginPage() {
   const router = useRouter();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
@@ -128,18 +130,30 @@ export default function LoginPage() {
           </button>
         )}
 
-        <div className="mt-4">
+        <div className="mt-4 flex items-center justify-between">
           <button
             onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
             className="text-sm text-blue-600"
           >
             {mode === "signin" ? "No account? Sign up" : "Have an account? Sign in"}
           </button>
+
+          {/* NEW: How it works / tutorial */}
+          <Link
+            href="/how-it-works"
+            className="inline-flex items-center rounded-full px-4 py-2 text-sm font-medium bg-zinc-200 hover:bg-zinc-300 text-zinc-900 transition"
+            aria-label="Open the tutorial on how the app works"
+          >
+            How it works
+          </Link>
         </div>
 
-        <a href="/" className="mt-4 block text-sm text-zinc-600 dark:text-zinc-300">
+        <Link
+          href="/"
+          className="mt-4 block text-sm text-zinc-600 dark:text-zinc-300"
+        >
           Back to home
-        </a>
+        </Link>
       </div>
     </div>
   );
