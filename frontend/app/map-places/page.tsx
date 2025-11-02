@@ -1,5 +1,3 @@
-// frontend/app/map-places/page.tsx
-
 "use client";
 
 import React from "react";
@@ -59,6 +57,26 @@ type Pin = {
 };
 
 const LS_KEY = "map_pins_v1";
+const MAX_API_PINS = 10; // <-- change only here if you want a different limit
+
+/* ---------------------------
+   Helper: sample up to N elements without replacement
+   Uses Fisher-Yates shuffle to avoid duplicates.
+---------------------------- */
+function sampleUpTo<T>(arr: T[], n: number): T[] {
+  if (!Array.isArray(arr) || arr.length === 0) return [];
+  const copy = arr.slice();
+  // Fisher-Yates shuffle until we've moved n items to the front
+  const len = copy.length;
+  const take = Math.min(n, len);
+  for (let i = 0; i < take; i++) {
+    const j = i + Math.floor(Math.random() * (len - i));
+    const tmp = copy[i];
+    copy[i] = copy[j];
+    copy[j] = tmp;
+  }
+  return copy.slice(0, take);
+}
 
 /* ---------------------------
    Listen to map clicks (for user pins)
@@ -169,17 +187,21 @@ export default function MapPage() {
         // Expecting OSM-like shape: { elements: [ {type, id, lat, lon, tags: {...}} ] }
         const elements = Array.isArray(data?.elements) ? data.elements : [];
 
-        const fromApi: Pin[] = elements
-          .filter((el: any) => typeof el.lat === "number" && typeof el.lon === "number")
-          .map((el: any) => ({
-            id: String(el.id ?? `${el.type ?? "node"}_${Math.random().toString(36).slice(2,8)}`),
-            lat: el.lat,
-            lon: el.lon,
-            name: el.tags?.name,
-            website: el.tags?.website,
-            tags: el.tags,
-            source: "json",
-          }));
+        // Keep only elements with coordinates
+        const withCoords = elements.filter((el: any) => typeof el.lat === "number" && typeof el.lon === "number");
+
+        // Sample up to MAX_API_PINS random elements (no duplicates). If elements < MAX_API_PINS we take all.
+        const sampled = sampleUpTo(withCoords, MAX_API_PINS);
+
+        const fromApi: Pin[] = sampled.map((el: any) => ({
+          id: String(el.id ?? `${el.type ?? "node"}_${Math.random().toString(36).slice(2, 8)}`),
+          lat: el.lat,
+          lon: el.lon,
+          name: el.tags?.name,
+          website: el.tags?.website,
+          tags: el.tags,
+          source: "json",
+        }));
 
         // Merge: keep existing user pins (source=user) and add API pins
         setPins((existing) => {
@@ -241,7 +263,8 @@ export default function MapPage() {
 
         <div className="w-full h-[70vh] rounded-lg border border-black/[.08] dark:border-white/[.145] shadow-md overflow-hidden relative">
           <MapContainer
-            center={[24.4539, 54.3773]}
+            // Center changed to Durham, UK (lat, lon)
+            center={[54.7753, -1.5840]}
             zoom={12}
             scrollWheelZoom={true}
             style={{ height: "100%", width: "100%" }}
@@ -286,8 +309,7 @@ export default function MapPage() {
                           className="text-sky-700 underline"
                         >
                           {p.id}
-                        </a>{" "}
-                        —
+                        </a>{" "}—
                       </p>
 
                       <p className="mt-2 text-lg font-bold">
@@ -343,7 +365,7 @@ export default function MapPage() {
 
         <div className="mt-4">
           <div className="text-sm text-zinc-600 dark:text-zinc-300">
-            Showing <span className="font-medium">{pins.length}</span> markers.
+            Showing <span className="font-medium">{pins.length}</span> markers (up to {MAX_API_PINS} from API + any user pins).
           </div>
         </div>
       </div>
