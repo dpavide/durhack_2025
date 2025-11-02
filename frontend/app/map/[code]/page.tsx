@@ -158,6 +158,7 @@ export default function MapPage() {
   const fgRef = useRef<any>(null);
   const lastLayerRef = useRef<any>(null);
   const mapRef = useRef<any>(null); // live edit: keep map instance
+  const channelRef = useRef<any>(null); // <-- ADDED: store realtime channel for broadcasts
 
   // Area + validation UI
   const [areaKm2, setAreaKm2] = useState<number | null>(null);
@@ -234,7 +235,7 @@ export default function MapPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code]);
 
-  // Realtime: listen for polygon updates
+  // Realtime: listen for polygon updates AND broadcast "map-continue" to redirect non-masters
   useEffect(() => {
     if (!code) return;
     const channel = supabase
@@ -247,9 +248,21 @@ export default function MapPage() {
           setPolygon(geoJSONToPositions(poly));
         }
       )
+      .on("broadcast", { event: "map-continue" }, () => {
+        // Non-masters auto-redirect when master clicks Continue
+        if (!isMaster) {
+          router.replace(`/map-places/${code}`);
+        }
+      })
       .subscribe();
-    return () => void supabase.removeChannel(channel);
-  }, [code]);
+
+    channelRef.current = channel;
+
+    return () => {
+      channelRef.current = null;
+      void supabase.removeChannel(channel);
+    };
+  }, [code, isMaster, router]);
 
   // Any time the polygon state changes (including from realtime), recompute area + validity + color
   useEffect(() => {
@@ -571,6 +584,17 @@ export default function MapPage() {
       setIsSending(false);
       setSendSuccess(true); // Set success before navigating
 
+      // <-- ADDED: broadcast to other participants telling them to continue
+      try {
+        await channelRef.current?.send({
+          type: "broadcast",
+          event: "map-continue",
+          payload: { session: code },
+        });
+      } catch {
+        // ignore broadcast errors
+      }
+
       // 3. **NAVIGATE** to the map-places page. That page will call GET /api/map/search on mount and render the markers.
       //    This correctly uses the dynamic route path.
       router.push(`/map-places/${code}`);
@@ -775,4 +799,3 @@ export default function MapPage() {
     </div>
   );
 }
-
