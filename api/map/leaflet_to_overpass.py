@@ -1,8 +1,9 @@
+# api/map/leaflet_to_overpass.py
 """
 Utilities to parse Leaflet-style latlng JSON and query Overpass API.
 """
 
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple, Dict, Any, Union
 import requests
 
 # Overpass API endpoint (public). You can change to any Overpass instance if needed.
@@ -78,17 +79,61 @@ def polygon_to_overpass_poly_string(polygon: List[Tuple[float, float]]) -> str:
     return " ".join(parts)
 
 
-def build_overpass_query(poly_string: str, amenity: str = "restaurant", timeout: int = 25) -> str:
+def build_overpass_query(poly_string: str, amenity: Union[str, List[str]] = "restaurant", timeout: int = 25) -> str:
     """
-    Build a standard Overpass QL query returning nodes, ways, relations with `amenity`.
-    We request `out center;` so ways/relations return a center (lat/lon) we can map easily.
+    Build an Overpass QL query returning nodes, ways, relations for one or multiple amenity values.
+
+    `amenity` can be a string like "restaurant" or "amenity=restaurant" or a list like
+    ["amenity=bar", "amenity=cafe"] or ["bar","cafe"].
+
+    The function will normalize and generate an Overpass union:
+        ( node["amenity"="..."](poly:"...");
+          way["amenity"="..."](poly:"...");
+          relation["amenity"="..."](poly:"...");
+        );
+        out center;
     """
+    # Normalize amenity parameter into list of key/value strings like amenity=bar
+    if isinstance(amenity, str):
+        # If user passed "amenity=bar" keep it; if just "bar", prepend "amenity="
+        if "=" in amenity:
+            amen_list = [amenity]
+        else:
+            amen_list = [f"amenity={amenity}"]
+    else:
+        # amenity is list
+        amen_list = []
+        for a in amenity:
+            if not isinstance(a, str):
+                continue
+            a = a.strip()
+            if not a:
+                continue
+            if "=" in a:
+                amen_list.append(a)
+            else:
+                amen_list.append(f"amenity={a}")
+
+    # Build the union clause with node/way/relation for each amenity
+    clauses = []
+    for a in amen_list:
+        try:
+            k, v = a.split("=", 1)
+            k = k.strip()
+            v = v.strip()
+        except Exception:
+            # fallback: treat as amenity=<value>
+            k = "amenity"
+            v = a.strip()
+        clauses.append(f'  node["{k}"="{v}"](poly:"{poly_string}");')
+        clauses.append(f'  way["{k}"="{v}"](poly:"{poly_string}");')
+        clauses.append(f'  relation["{k}"="{v}"](poly:"{poly_string}");')
+
+    clauses_text = "\n".join(clauses)
     q = f"""
 [out:json][timeout:{timeout}];
 (
-  node["amenity"="{amenity}"](poly:"{poly_string}");
-  way["amenity"="{amenity}"](poly:"{poly_string}");
-  relation["amenity"="{amenity}"](poly:"{poly_string}");
+{clauses_text}
 );
 out center;
 """

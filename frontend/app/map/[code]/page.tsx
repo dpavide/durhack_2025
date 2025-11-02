@@ -1,3 +1,5 @@
+// frontend/app/map/[code]/page.tsx
+
 "use client";
 
 import dynamic from "next/dynamic";
@@ -235,7 +237,8 @@ export default function MapPage() {
   };
   
   // NEW: Function to fetch and merge all intentions
-  const fetchAndDisplayIntentions = async () => {
+  // RETURNS the merged text (string) or null if none/error
+  const fetchAndDisplayIntentions = async (): Promise<string | null> => {
     setAllIntentionsText("Fetching intentions...");
     
     // Query the planning_intentions table for the current room
@@ -247,23 +250,24 @@ export default function MapPage() {
     if (error) {
       console.error("Error fetching intentions:", error);
       setAllIntentionsText("Error fetching intentions. Check console for details.");
-      return;
+      return null;
     }
     
     if (!intentionsData || intentionsData.length === 0) {
       setAllIntentionsText("No planning intentions were submitted for this session.");
-      return;
+      return null;
     }
 
     // Format the data as "Username: Task Description" and join with newlines
     const mergedText = intentionsData
       .map((item: any) => {
-        const username = item.profiles?.username ?? `User ${item.user_id.substring(0, 5)}`;
+        const username = item.profiles?.username ?? `User ${item.user_id?.substring?.(0, 5) ?? "unknown"}`;
         return `${username}: ${item.task_description}`;
       })
-      .join('\n');
+      .join("\n");
       
     setAllIntentionsText(mergedText);
+    return mergedText;
   };
 
 
@@ -409,8 +413,29 @@ export default function MapPage() {
       await resp.json();
       setSendSuccess(true);
       
-      // 2. NEW: Fetch and display intentions
-      await fetchAndDisplayIntentions();
+      // 2. NEW: Fetch intentions and POST them to the gemini endpoint
+      const mergedText = await fetchAndDisplayIntentions();
+
+      if (mergedText) {
+        try {
+          const promptUrl =
+            BACKEND_BASE !== "" ? `${BACKEND_BASE}/api/gemini/set_prompt` : "/api/gemini/set_prompt";
+
+          const promptResp = await fetch(promptUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ prompt: mergedText }),
+          });
+
+          if (!promptResp.ok) {
+            const txt = await promptResp.text().catch(() => "");
+            setSendError(`Failed to save USER_PROMPT: ${promptResp.status} ${txt}`);
+          }
+        } catch (err: any) {
+          console.error("Error posting prompt to backend:", err);
+          setSendError(String(err));
+        }
+      }
       
       setIsSending(false);
 

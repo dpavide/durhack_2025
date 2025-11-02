@@ -1,9 +1,11 @@
-# overpass_routers.py
+# api/routers/overpass_routers.py
 
 from fastapi import APIRouter, HTTPException, Query, Body
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 import logging
+import re
+import importlib
 
 # Import our helper functions
 from api.map.leaflet_to_overpass import (
@@ -14,7 +16,10 @@ from api.map.leaflet_to_overpass import (
 )
 
 # Import Google Maps helper
-from gmap.call_gmaps import call_gmaps
+from api.gmap.call_gmaps import call_gmaps
+
+# Import the Gemini response parser
+from api.gemini.parse_gemini_resp import parse_gemini_response
 
 router = APIRouter()
 
@@ -96,11 +101,39 @@ def _build_search_name(tags: Dict[str, Any]) -> str:
     return " ".join([p for p in parts if p]).strip()
 
 
+# ---------------- helper: build a single Overpass query matching any of several amenity values ---------------
+def _build_overpass_query_for_amenities(poly_str: str, amenity_values: List[str]) -> str:
+    """
+    Build an Overpass Q that matches nodes/ways/relations with amenity in amenity_values
+    using a regex on the amenity tag. amenity_values should be just the right-hand side values
+    (e.g. ["cafe", "restaurant"]) NOT including "amenity=" prefix.
+    """
+    if not amenity_values:
+        raise ValueError("amenity_values must be non-empty")
+
+    # escape values for regex
+    escaped = [re.escape(v) for v in amenity_values]
+    pattern = "^(" + "|".join(escaped) + ")$"
+
+    q_parts = [
+        '[out:json][timeout:25];',
+        '(',
+        f'  node["amenity"~"{pattern}"](poly:"{poly_str}");',
+        f'  way["amenity"~"{pattern}"](poly:"{poly_str}");',
+        f'  relation["amenity"~"{pattern}"](poly:"{poly_str}");',
+        ');',
+        'out center;'
+    ]
+    return "\n".join(q_parts)
+
+
+# ----------------- Overpass search (GET) now uses Gemini output if available -----------------
 @router.get("/search", response_model=OverpassResponseModel)
 def search_overpass(amenity: str = Query("restaurant", description="Amenity to search for (default: restaurant)")):
     """
-    Use the SAMPLE_DATA global variable, parse polygon(s), query Overpass for the given amenity,
-    and return Overpass's JSON 'elements' list.
+    Use the SAMPLE_DATA global variable, parse polygon(s), attempt to retrieve a Gemini response
+    (via the gemini router's get_response function), parse it into amenity filters, and query Overpass
+    for the matching amenities. If Gemini returns nothing usable, fall back to the 'amenity' query param.
     """
     try:
         polygons = extract_polygons_from_frontend_json(SAMPLE_DATA)
@@ -113,10 +146,42 @@ def search_overpass(amenity: str = Query("restaurant", description="Amenity to s
         if not poly_str:
             raise HTTPException(status_code=400, detail="Invalid polygon coordinates.")
 
+        # Attempt to obtain the gemini response from the gemini router module.
+        amenity_values_to_search: List[str] = []
+        try:
+            # import the gemini router module dynamically and call its get_response function
+            gemini_mod = importlib.import_module("api.routers.gemini.gemini_router")
+            # call the function (it returns {"response": GEMINI_RESPONSE})
+            gemini_payload = getattr(gemini_mod, "get_response")()
+            raw_gemini_text = None
+            if isinstance(gemini_payload, dict):
+                raw_gemini_text = gemini_payload.get("response")
+            else:
+                # fallback: module might expose GEMINI_RESPONSE directly
+                raw_gemini_text = getattr(gemini_mod, "GEMINI_RESPONSE", None)
+            # parse gemini response into list of strings
+            parsed_filters = parse_gemini_response(raw_gemini_text)
+            # filter only strings that look like amenity=...
+            amenity_filters = [s for s in parsed_filters if isinstance(s, str) and s.strip().startswith("amenity=")]
+            if amenity_filters:
+                # strip the 'amenity=' prefix
+                amenity_values_to_search = [s.split("=", 1)[1].strip() for s in amenity_filters if "=" in s]
+        except Exception:
+            # If anything goes wrong we log but do not fail — fallback to the explicit 'amenity' param.
+            logging.exception("Failed to obtain/parse Gemini response; falling back to 'amenity' query param.")
+
+        # if gemini provided amenity values, build a regex-based single Overpass query
+        if amenity_values_to_search:
+            # build and run our custom Overpass query
+            q = _build_overpass_query_for_amenities(poly_str, amenity_values_to_search)
+            raw = query_overpass(q)
+            elements = raw.get("elements", []) if isinstance(raw, dict) else []
+            return {"elements": elements}
+
+        # otherwise fallback to single-amenity query using existing helper
         query = build_overpass_query(poly_str, amenity=amenity)
         raw = query_overpass(query)
 
-        # The Overpass response has top-level keys like 'version', 'elements', etc.
         elements = raw.get("elements", [])
         return {"elements": elements}
 
@@ -132,6 +197,7 @@ def search_overpass_post(payload: List[FrontendPolygonItem], amenity: str = Quer
     """
     Accept a POST body (list of polygon items in the same structure as SAMPLE_DATA), parse polygons,
     and query Overpass. Useful once frontend sends its JSON here directly.
+    This POST behavior is unchanged: it uses the supplied payload (not the gemini response).
     """
     try:
         # Convert Pydantic models to dicts
@@ -195,9 +261,7 @@ def set_sample(payload: List[Dict[str, Any]] = Body(...)):
 
 
 # ---------------- New endpoints that call Google Maps for the top N Overpass results ----------------
-# Note: these endpoints now return ONLY the Google Maps summary (name, lat, lon, rating, up to reviews_n reviews).
-# The full Overpass elements list is still available from /search and /search (POST).
-
+# (unchanged from your original; left as-is)
 @router.get("/search/gmap")
 def search_overpass_with_gmap(
     amenity: str = Query("restaurant", description="Amenity to search for (default: restaurant)"),
