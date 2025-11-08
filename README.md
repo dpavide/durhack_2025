@@ -1,28 +1,70 @@
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fvercel%2Fexamples%2Ftree%2Fmain%2Fpython%2Ffastapi&demo-title=FastAPI&demo-description=Use%20FastAPI%20on%20Vercel%20with%20Serverless%20Functions%20using%20the%20Python%20Runtime.&demo-url=https%3A%2F%2Fvercel-plus-fastapi.vercel.app%2F&demo-image=https://assets.vercel.com/image/upload/v1669994600/random/python.png)
+# DurHack 2025 Project
 
-# FastAPI + Vercel
+## Overview
+This project is a full-stack web application designed for collaborative map-based decision making, such as group event planning or location voting. It combines a Next.js frontend with a FastAPI backend, integrating real-time features, Google Maps routing, and Supabase authentication/storage.
 
-This example shows how to use FastAPI on Vercel with Serverless Functions using the [Python Runtime](https://vercel.com/docs/concepts/functions/serverless-functions/runtimes/python).
+## Features
+- **User Authentication:** Secure login and session management via Supabase.
+- **Room System:** Users can create or join rooms for collaborative sessions.
+- **Map Pinning:** Participants select and pin locations on an interactive map.
+- **Voting:** Users vote for their favorite locations; votes are updated in real-time.
+- **Route Calculation:** Backend uses Google Maps (Routes API) to compute and display optimal routes between selected points.
+- **Results Page:** Visualizes the winning location and the best route for the group.
+- **Real-Time Updates:** Leveraging Supabase channels for live voting and selection updates.
 
-## Demo
+## Tech Stack
+- **Frontend:** Next.js (React, TypeScript, Tailwind CSS)
+- **Backend:** FastAPI (Python)
+- **Database & Auth:** Supabase
+- **Maps & Routing:** Google Maps API (Routes API)
+- **Deployment:** Vercel (monorepo setup)
 
-https://vercel-plus-fastapi.vercel.app/
+## Folder Structure
+- `frontend/` — Next.js app (UI, pages, components)
+- `api/` — FastAPI backend (routers, Google Maps integration)
+- `public/` — Static assets
 
-## How it Works
+## Setup Instructions
+1. **Clone the repository:**
+   ```sh
+   git clone https://github.com/dpavide/durhack_2025.git
+   cd durhack_2025
+   ```
+2. **Install dependencies:**
+   - Backend:
+     ```sh
+     cd api
+     pip install -r requirements.txt
+     ```
+   - Frontend:
+     ```sh
+     cd ../frontend
+     npm install
+     ```
+3. **Environment Variables:**
+   - Set up `.env.local` in `frontend/` for Next.js (see `.env.example` if available).
+   - Set up environment variables for Google Maps API keys and Supabase in both frontend and backend as needed.
+4. **Run locally:**
+   - Backend:
+     ```sh
+     cd api
+     uvicorn main:app --reload
+     ```
+   - Frontend:
+     ```sh
+     cd frontend
+     npm run dev
+     ```
+5. **Deployment:**
+   - The project is configured for Vercel monorepo deployment. See `vercel.json` for details.
 
-This example uses the Asynchronous Server Gateway Interface (ASGI) with FastAPI to enable handling requests on Vercel with Serverless Functions.
+## API Endpoints (Backend)
+- `POST /api/gmap/compute-routes` — Compute routes using Google Maps Routes API.
+- `POST /api/gemini/ask` — (Optional) Interact with Gemini AI.
+- `POST /api/map/overpass` — Query Overpass API for map data.
 
-## Running Locally
+## Contributing
+Pull requests are welcome! For major changes, please open an issue first to discuss what you would like to change.
 
-```bash
-npm i -g vercel
-vercel dev
-```
-
-Your FastAPI application is now available at `http://localhost:3000`.
-
-## One-Click Deploy
-
-Deploy the example using [Vercel](https://vercel.com?utm_source=github&utm_medium=readme&utm_campaign=vercel-examples):
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fvercel%2Fexamples%2Ftree%2Fmain%2Fpython%2Ffastapi&demo-title=FastAPI&demo-description=Use%20FastAPI%20on%20Vercel%20with%20Serverless%20Functions%20using%20the%20Python%20Runtime.&demo-url=https%3A%2F%2Fvercel-plus-fastapi.vercel.app%2F&demo-image=https://assets.vercel.com/image/upload/v1669994600/random/python.png)
+## License
+MIT License
